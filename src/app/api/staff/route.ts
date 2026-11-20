@@ -28,6 +28,7 @@ async function authorize(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const { actor, admin } = await authorize(request);
+    if (actor.role !== "admin") return NextResponse.json({ error: "Personel hesabı oluşturma yetkisi yalnızca merkez yöneticidedir." }, { status: 403 });
     const body = await request.json();
     const fullName = String(body.full_name || "").trim();
     const username = String(body.username || "").trim().toLowerCase();
@@ -83,6 +84,9 @@ export async function PATCH(request: NextRequest) {
     const isActive = body.is_active === undefined ? undefined : Boolean(body.is_active);
     if (!id) return NextResponse.json({ error: "Personel kimliği eksik." }, { status: 400 });
     if (actor.id === id) return NextResponse.json({ error: "Kendi yönetici hesabınızı bu ekrandan değiştiremezsiniz." }, { status: 403 });
+    if (actor.role !== "admin" && (fullName !== undefined || username !== undefined || password || role !== undefined)) {
+      return NextResponse.json({ error: "Kullanıcı adı, ad soyad, rol ve şifre değişikliği yalnızca merkez yönetici tarafından yapılabilir." }, { status: 403 });
+    }
 
     const { data: target, error: targetError } = await admin.from("profiles")
       .select("id,role,username").eq("id", id).single();
