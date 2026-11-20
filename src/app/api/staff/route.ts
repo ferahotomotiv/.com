@@ -11,15 +11,24 @@ async function authorize(request: NextRequest) {
   if (!url || !anon || !secret) throw new Error("Sunucu yapılandırması eksik. SUPABASE_SERVICE_ROLE_KEY kontrol edilmeli.");
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   if (!token) throw new Error("Oturum doğrulanamadı.");
-  const userClient = createClient(url, anon, { auth: { autoRefreshToken: false, persistSession: false } });
+  // Keep the caller's JWT on database requests so the profile lookup runs
+  // under the authenticated user's RLS policies, not the API key's role.
+  const userClient = createClient(url, anon, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
   const { data, error } = await userClient.auth.getUser(token);
   if (error || !data.user) throw new Error("Oturum geçersiz veya süresi dolmuş.");
-  const admin = createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false } });
-  const { data: actor, error: profileError } = await admin
+  const { data: actor, error: profileError } = await userClient
     .from("profiles").select("id,role,is_active").eq("id", data.user.id).single();
-  if (profileError || !actor || !actor.is_active || actor.role !== "admin") {
+  if (profileError) {
+    throw new Error("Yönetici profili doğrulanamadı: " + profileError.message);
+  }
+  if (!actor || !actor.is_active || actor.role !== "admin") {
     throw new Error("Personel yönetimi yalnızca aktif yönetici rolüne açıktır.");
   }
+  // The secret key is used only for privileged Auth admin operations.
+  const admin = createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false } });
   return { actor, admin };
 }
 
