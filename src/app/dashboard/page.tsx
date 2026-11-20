@@ -127,7 +127,6 @@ export default function DashboardPage() {
       if (!uploadError) await supabase.from("vehicles").update({photo_path:path}).eq("id",vehicle.id);
       else setNotice("Araç kaydedildi ancak görsel yüklenemedi: "+uploadError.message);
     }
-    await supabase.from("vehicle_events").insert({vehicle_id:vehicle.id,actor_id:user.id,event_type:"intake",title:"Araç servise kabul edildi",details:"Araç kabul kaydı oluşturuldu.",status:"intake",customer_visible:true});
     if (codeError) setNotice("Araç kaydedildi ancak müşteri erişim kodu oluşturulamadı: "+codeError.message);
     else { setAccessCode(code); setNotice("Araç başarıyla kaydedildi. Müşteri erişim kodunu güvenli şekilde iletin."); }
     setShowVehicleForm(false);
