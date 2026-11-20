@@ -37,6 +37,10 @@ export async function DELETE(request: NextRequest) {
       const { data: vehicle, error: lookupError } = await admin
         .from("vehicles").select("id,plate,photo_path").eq("id", id).single();
       if (lookupError || !vehicle) return NextResponse.json({ error: "Araç kaydı bulunamadı." }, { status: 404 });
+      if (vehicle.photo_path) {
+        const { error: photoError } = await admin.storage.from("vehicle-media").remove([vehicle.photo_path]);
+        if (photoError) return NextResponse.json({ error: "Araç fotoğrafı silinemedi; kayıt güvenlik için korunuyor: " + photoError.message }, { status: 500 });
+      }
       const { error } = await admin.from("vehicles").delete().eq("id", id);
       if (error) return NextResponse.json({ error: "Araç silinemedi: " + error.message }, { status: 500 });
       return NextResponse.json({ ok: true, deleted: "vehicle", label: vehicle.plate });
