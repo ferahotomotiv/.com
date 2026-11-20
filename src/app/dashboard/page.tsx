@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 type Role = "admin" | "supervisor" | "mechanic";
 type VehicleStatus = "intake" | "inspecting" | "waiting_parts" | "repairing" | "testing" | "ready" | "delivered" | "cancelled";
 type Vehicle = { id:string; plate:string; owner_name:string; contact_phone:string; make:string; model:string; complaint:string; status:VehicleStatus; estimated_completion:string|null; received_at:string; photo_path:string|null };
-type Job = { id:string; vehicle_id:string; title:string; diagnosis:string|null; required_parts:string|null; mechanic_notes:string|null; status:VehicleStatus; assigned_mechanic_id:string|null; created_at:string };
+type Job = { id:string; vehicle_id:string; title:string; diagnosis:string|null; required_parts:string|null; mechanic_notes:string|null; status:VehicleStatus; assigned_mechanic_id:string|null; started_at:string|null; completed_at:string|null; created_at:string };
 type Profile = { id:string; full_name:string; role:Role; is_active:boolean; last_seen_at:string|null };
 type Entry = { id:string; entry_type:"income"|"expense"; category:string; description:string; amount:number; entry_date:string; vehicle_id:string|null };
 type Message = { id:string; sender_id:string; recipient_id:string|null; body:string; read_at:string|null; created_at:string };
