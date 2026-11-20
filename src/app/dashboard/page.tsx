@@ -203,6 +203,8 @@ export default function DashboardPage() {
     event.preventDefault();
     if (!supabase || !user || !isManager) return;
     setSaving(true); setNotice(""); setAccessCode("");
+    // Open WhatsApp synchronously from the submit gesture so popup blockers do not suppress it.
+    const whatsappWindow = window.open("about:blank", "_blank");
     const form = new FormData(event.currentTarget);
     const plate = String(form.get("plate")||"").trim().toLocaleUpperCase("tr-TR");
     const rawCode = crypto.getRandomValues(new Uint8Array(10));
@@ -232,8 +234,37 @@ export default function DashboardPage() {
       if (!uploadError) await supabase.from("vehicles").update({photo_path:path}).eq("id",vehicle.id);
       else setNotice("Araç kaydedildi ancak görsel yüklenemedi: "+uploadError.message);
     }
-    if (codeError) setNotice("Araç kaydedildi ancak müşteri erişim kodu oluşturulamadı: "+codeError.message);
-    else { setAccessCode(code); setNotice("Araç başarıyla kaydedildi. Müşteri erişim kodunu güvenli şekilde iletin."); }
+    if (codeError) {
+      if(whatsappWindow) whatsappWindow.close();
+      setNotice("Araç kaydedildi ancak müşteri erişim kodu oluşturulamadı: "+codeError.message);
+    } else {
+      setAccessCode(code);
+      const customerPhone = String(form.get("contact_phone")||"").replace(/\\D/g,"").replace(/^0/,"90");
+      const trackingUrl = window.location.origin + "/track";
+      const statusText = "Araç kabul edildi";
+      const message = [
+        "Merhaba "+String(form.get("owner_name")||"").trim()+",",
+        "FERAH AUTO'ya aracınızın servis kaydı oluşturulmuştur.",
+        "",
+        "Plaka: "+plate,
+        "Araç: "+String(form.get("make")||"")+" "+String(form.get("model")||""),
+        "Kayıt / erişim kodu: "+code,
+        "Şu anki işlem: "+statusText,
+        "",
+        "Servis durumunu takip etmek için:",
+        trackingUrl,
+        "",
+        "Sorgulama ekranında plakanızı ve yukarıdaki erişim kodunu girmeniz yeterlidir.",
+        "FERAH OTOMOTİV"
+      ].join("\\n");
+      if(customerPhone.length>=10 && whatsappWindow) {
+        whatsappWindow.location.href = "https://wa.me/"+customerPhone+"?text="+encodeURIComponent(message);
+        setNotice("Araç kaydedildi. Müşteriye gönderilecek WhatsApp mesajı hazırlandı; WhatsApp'ta Gönder'e basarak iletin.");
+      } else {
+        if(whatsappWindow) whatsappWindow.close();
+        setNotice("Araç kaydedildi ancak telefon numarası WhatsApp için uygun değil. Müşteri erişim kodunu manuel iletin.");
+      }
+    }
     setShowVehicleForm(false);
     await loadData();
     setSaving(false);
