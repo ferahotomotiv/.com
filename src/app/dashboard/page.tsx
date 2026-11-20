@@ -17,6 +17,7 @@ type Job = { id:string; vehicle_id:string; title:string; diagnosis:string|null; 
 type Profile = { id:string; full_name:string; username:string|null; contact_phone:string|null; job_title:string|null; role:Role; is_active:boolean; last_seen_at:string|null };
 type Entry = { id:string; entry_type:"income"|"expense"; category:string; description:string; amount:number; entry_date:string; vehicle_id:string|null };
 type Message = { id:string; sender_id:string; recipient_id:string|null; body:string; read_at:string|null; created_at:string };
+type VehicleEvent = { id:string; vehicle_id:string; actor_id:string|null; title:string; created_at:string };
 
 const statusLabels: Record<VehicleStatus,string> = {
   intake:"Araç kabul", inspecting:"İnceleniyor", waiting_parts:"Parça bekliyor",
@@ -42,6 +43,7 @@ export default function DashboardPage() {
   const [profile,setProfile] = useState<Profile|null>(null);
   const [vehicles,setVehicles] = useState<Vehicle[]>([]);
   const [jobs,setJobs] = useState<Job[]>([]);
+  const [vehicleEvents,setVehicleEvents] = useState<VehicleEvent[]>([]);
   const [staff,setStaff] = useState<Profile[]>([]);
   const [entries,setEntries] = useState<Entry[]>([]);
   const [messages,setMessages] = useState<Message[]>([]);
@@ -75,13 +77,17 @@ export default function DashboardPage() {
     if (profileError || !profileData || !profileData.is_active) { await supabase.auth.signOut(); router.replace("/login"); return; }
     setProfile(profileData as Profile);
 
-    const [vehicleRes,jobRes] = await Promise.all([
+    const [vehicleRes,jobRes,eventRes,staffRes] = await Promise.all([
       supabase.from("vehicles").select("id,plate,owner_name,contact_phone,make,model,complaint,status,estimated_completion,received_at,photo_path").order("received_at",{ascending:false}).limit(100),
-      supabase.from("service_jobs").select("id,vehicle_id,title,diagnosis,required_parts,mechanic_notes,status,assigned_mechanic_id,created_at").order("created_at",{ascending:false}).limit(100)
+      supabase.from("service_jobs").select("id,vehicle_id,title,diagnosis,required_parts,mechanic_notes,status,assigned_mechanic_id,started_at,completed_at,created_at").order("created_at",{ascending:false}).limit(100),
+      supabase.from("vehicle_events").select("id,vehicle_id,actor_id,title,created_at").order("created_at",{ascending:false}).limit(300),
+      supabase.from("profiles").select("id,full_name,username,contact_phone,job_title,role,is_active,last_seen_at").eq("is_active",true).order("full_name")
     ]);
     if (vehicleRes.error) setError(vehicleRes.error.message);
     setVehicles((vehicleRes.data||[]) as Vehicle[]);
     setJobs((jobRes.data||[]) as Job[]);
+    setVehicleEvents((eventRes.data||[]) as VehicleEvent[]);
+    setStaff((staffRes.data||[]) as Profile[]);
 
     if (["admin", "manager", "supervisor"].includes(profileData.role)) {
       const [staffRes,entryRes] = await Promise.all([
