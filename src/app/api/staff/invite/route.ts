@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
 
   const authClient = createClient(supabaseUrl, anonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
   });
   const { data: authData, error: authError } = await authClient.auth.getUser(token);
   if (authError || !authData.user) {
