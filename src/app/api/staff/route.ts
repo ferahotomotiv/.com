@@ -120,6 +120,7 @@ export async function PATCH(request: NextRequest) {
     if (username !== undefined && username !== target.username) authPatch.email = usernameToEmail(username);
     if (password) authPatch.password = password;
     if (fullName !== undefined) authPatch.user_metadata = { full_name: fullName };
+    if (isActive !== undefined) authPatch.ban_duration = isActive ? "none" : "876000h";
     if (Object.keys(authPatch).length) {
       const { error } = await admin.auth.admin.updateUserById(id, authPatch);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -131,10 +132,7 @@ export async function PATCH(request: NextRequest) {
     if (jobTitle !== undefined) profilePatch.job_title = jobTitle;
     if (username !== undefined) profilePatch.username = username;
     if (role !== undefined && actor.role === "admin") profilePatch.role = role;
-    if (isActive !== undefined) {
-      profilePatch.is_active = isActive;
-      authPatch.ban_duration = isActive ? "none" : "876000h";
-    }
+    if (isActive !== undefined) profilePatch.is_active = isActive;
     if (Object.keys(profilePatch).length) {
       const { error } = await admin.from("profiles").update(profilePatch).eq("id", id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
