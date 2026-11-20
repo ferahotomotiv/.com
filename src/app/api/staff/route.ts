@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
     const password = String(body.password || "");
     const requestedRole = String(body.role || "mechanic");
     const role = actor.role === "admin" ? requestedRole : "mechanic";
+    if (contactPhone.length > 30) return NextResponse.json({ error: "İletişim numarası en fazla 30 karakter olabilir." }, { status: 400 });
+    if (jobTitle.length < 2 || jobTitle.length > 80) return NextResponse.json({ error: "Görev 2-80 karakter olmalıdır." }, { status: 400 });
     if (fullName.length < 2 || fullName.length > 120) {
       return NextResponse.json({ error: "Ad soyad 2-120 karakter olmalıdır." }, { status: 400 });
     }
@@ -131,7 +133,10 @@ export async function PATCH(request: NextRequest) {
     if (jobTitle !== undefined) profilePatch.job_title = jobTitle;
     if (username !== undefined) profilePatch.username = username;
     if (role !== undefined && actor.role === "admin") profilePatch.role = role;
-    if (isActive !== undefined) profilePatch.is_active = isActive;
+    if (isActive !== undefined) {
+      profilePatch.is_active = isActive;
+      authPatch.ban_duration = isActive ? "none" : "876000h";
+    }
     if (Object.keys(profilePatch).length) {
       const { error } = await admin.from("profiles").update(profilePatch).eq("id", id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -147,16 +152,18 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const { actor, admin } = await authorize(request);
-    if (actor.role !== "admin") return NextResponse.json({ error: "Personel silme yetkisi yalnızca merkez yöneticidedir." }, { status: 403 });
     const body = await request.json();
     const id = String(body.id || "");
     if (!id) return NextResponse.json({ error: "Personel kimliği eksik." }, { status: 400 });
-    if (actor.id === id) return NextResponse.json({ error: "Merkez yönetici kendi hesabını silemez." }, { status: 403 });
-    const { data: target, error: targetError } = await admin.from("profiles").select("id").eq("id", id).single();
+    if (actor.id === id) return NextResponse.json({ error: "Merkez yönetici kendi hesabını kaldıramaz." }, { status: 403 });
+    const { data: target, error: targetError } = await admin.from("profiles").select("id,role").eq("id", id).single();
     if (targetError || !target) return NextResponse.json({ error: "Personel bulunamadı." }, { status: 404 });
-    const { error } = await admin.auth.admin.deleteUser(id);
+    if (target.role === "admin") return NextResponse.json({ error: "Yönetici hesabı personel listesinden kaldırılamaz." }, { status: 403 });
+    const { error: authError } = await admin.auth.admin.updateUserById(id, { ban_duration: "876000h" });
+    if (authError) return NextResponse.json({ error: authError.message }, { status: 400 });
+    const { error } = await admin.from("profiles").update({ is_active: false }).eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, archived: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Beklenmeyen sunucu hatası.";
     const status = message.includes("yetkiniz") ? 403 : message.includes("Oturum") ? 401 : 500;
