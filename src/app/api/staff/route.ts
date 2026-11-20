@@ -118,7 +118,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Ad soyad 2-120 karakter olmalıdır." }, { status: 400 });
     }
 
-    const authPatch: { email?: string; password?: string; user_metadata?: { full_name: string } } = {};
+    const authPatch: { email?: string; password?: string; ban_duration?: string; user_metadata?: { full_name: string } } = {};
     if (username !== undefined && username !== target.username) authPatch.email = usernameToEmail(username);
     if (password) authPatch.password = password;
     if (fullName !== undefined) authPatch.user_metadata = { full_name: fullName };
