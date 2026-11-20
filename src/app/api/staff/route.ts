@@ -24,7 +24,7 @@ async function authorize(request: NextRequest) {
   if (profileError) {
     throw new Error("Yönetici profili doğrulanamadı: " + profileError.message);
   }
-  if (!actor || !actor.is_active || actor.role !== "admin") {
+  if (!actor || !actor.is_active || !["admin", "manager"].includes(actor.role)) {
     throw new Error("Personel yönetimi yalnızca aktif yönetici rolüne açıktır.");
   }
   // The secret key is used only for privileged Auth admin operations.
@@ -35,7 +35,7 @@ async function authorize(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const { actor, admin } = await authorize(request);
-    if (actor.role !== "admin") return NextResponse.json({ error: "Personel hesabı oluşturma yetkisi yalnızca merkez yöneticidedir." }, { status: 403 });
+    if (!["admin", "manager"].includes(actor.role)) return NextResponse.json({ error: "Personel hesabı oluşturma yetkisi yalnızca yönetici rollerine açıktır." }, { status: 403 });
     const body = await request.json();
     const fullName = String(body.full_name || "").trim();
     const contactPhone = String(body.contact_phone || "").trim();
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     if (password.length < 8 || password.length > 72) {
       return NextResponse.json({ error: "Şifre en az 8, en fazla 72 karakter olmalıdır." }, { status: 400 });
     }
-    if (!["supervisor", "mechanic"].includes(role)) {
+    if (!["manager", "supervisor", "mechanic"].includes(role)) {
       return NextResponse.json({ error: "Geçersiz personel rolü." }, { status: 400 });
     }
     const email = usernameToEmail(username);
@@ -97,20 +97,20 @@ export async function PATCH(request: NextRequest) {
     const isActive = body.is_active === undefined ? undefined : Boolean(body.is_active);
     if (!id) return NextResponse.json({ error: "Personel kimliği eksik." }, { status: 400 });
     if (actor.id === id) return NextResponse.json({ error: "Kendi yönetici hesabınızı bu ekrandan değiştiremezsiniz." }, { status: 403 });
-    if (actor.role !== "admin" && (fullName !== undefined || username !== undefined || password || role !== undefined)) {
+    if (!["admin", "manager"].includes(actor.role) && (fullName !== undefined || username !== undefined || password || role !== undefined)) {
       return NextResponse.json({ error: "Kullanıcı adı, ad soyad, rol ve şifre değişikliği yalnızca merkez yönetici tarafından yapılabilir." }, { status: 403 });
     }
 
     const { data: target, error: targetError } = await admin.from("profiles")
       .select("id,role,username").eq("id", id).single();
     if (targetError || !target) return NextResponse.json({ error: "Personel bulunamadı." }, { status: 404 });
-    if (actor.role !== "admin" && target.role !== "mechanic") {
+    if (!["admin", "manager"].includes(actor.role) && target.role !== "mechanic") {
       return NextResponse.json({ error: "Supervisor yalnızca usta hesaplarını yönetebilir." }, { status: 403 });
     }
-    if (role !== undefined && actor.role !== "admin") {
+    if (role !== undefined && !["admin", "manager"].includes(actor.role)) {
       return NextResponse.json({ error: "Rol değişikliği yalnızca yönetici tarafından yapılabilir." }, { status: 403 });
     }
-    if (role !== undefined && !["supervisor", "mechanic"].includes(role)) {
+    if (role !== undefined && !["manager", "supervisor", "mechanic"].includes(role)) {
       return NextResponse.json({ error: "Geçersiz rol." }, { status: 400 });
     }
     if (username !== undefined && !usernamePattern.test(username)) {
@@ -140,7 +140,7 @@ export async function PATCH(request: NextRequest) {
     if (contactPhone !== undefined) profilePatch.contact_phone = contactPhone;
     if (jobTitle !== undefined) profilePatch.job_title = jobTitle;
     if (username !== undefined) profilePatch.username = username;
-    if (role !== undefined && actor.role === "admin") profilePatch.role = role;
+    if (role !== undefined && ["admin", "manager"].includes(actor.role)) profilePatch.role = role;
     if (isActive !== undefined) profilePatch.is_active = isActive;
     if (Object.keys(profilePatch).length) {
       const { error } = await admin.from("profiles").update(profilePatch).eq("id", id);
