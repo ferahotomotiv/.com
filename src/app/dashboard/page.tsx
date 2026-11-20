@@ -212,19 +212,19 @@ export default function DashboardPage() {
     const code = Array.from(rawCode,b=>alphabet[b % alphabet.length]).join("");
     const assignedStaffId = String(form.get("assigned_staff_id")||"");
     const selectedStaff = staff.find(person=>person.id===assignedStaffId && person.is_active && ["mechanic","supervisor"].includes(person.role));
-    if (!selectedStaff) { setNotice("Araç için aktif bir usta veya supervisor seçin."); setSaving(false); return; }
+    if (!selectedStaff) { if(whatsappWindow) whatsappWindow.close(); setNotice("Araç için aktif bir usta veya supervisor seçin."); setSaving(false); return; }
     const {data:vehicle,error:createError} = await supabase.from("vehicles").insert({
       plate, owner_name:String(form.get("owner_name")||"").trim(),
       contact_phone:String(form.get("contact_phone")||"").trim(),
       make:String(form.get("make")||"").trim(), model:String(form.get("model")||"").trim(),
       complaint:String(form.get("complaint")||"").trim(), created_by:user.id, status:"intake"
     }).select("id").single();
-    if (createError || !vehicle) { setNotice(createError?.message || "Araç kaydı oluşturulamadı."); setSaving(false); return; }
+    if (createError || !vehicle) { if(whatsappWindow) whatsappWindow.close(); setNotice(createError?.message || "Araç kaydı oluşturulamadı."); setSaving(false); return; }
     const {error:jobCreateError} = await supabase.from("service_jobs").insert({
       vehicle_id:vehicle.id, assigned_mechanic_id:assignedStaffId,
       title:"Araç kabul / ilk inceleme", created_by:user.id, status:"inspecting"
     });
-    if (jobCreateError) { setNotice("Araç kaydedildi ancak sorumlu ataması yapılamadı: "+jobCreateError.message); setSaving(false); await loadData(); return; }
+    if (jobCreateError) { if(whatsappWindow) whatsappWindow.close(); setNotice("Araç kaydedildi ancak sorumlu ataması yapılamadı: "+jobCreateError.message); setSaving(false); await loadData(); return; }
     const {error:codeError} = await supabase.rpc("set_customer_access_code",{p_vehicle_id:vehicle.id,p_access_code:code});
     const file = form.get("photo") as File|null;
     if (file && file.size > 0) {
@@ -239,7 +239,7 @@ export default function DashboardPage() {
       setNotice("Araç kaydedildi ancak müşteri erişim kodu oluşturulamadı: "+codeError.message);
     } else {
       setAccessCode(code);
-      const customerPhone = String(form.get("contact_phone")||"").replace(/\\D/g,"").replace(/^0/,"90");
+      const customerPhone = String(form.get("contact_phone")||"").replace(/\D/g,"").replace(/^0/,"90");
       const trackingUrl = window.location.origin + "/track";
       const statusText = "Araç kabul edildi";
       const message = [
