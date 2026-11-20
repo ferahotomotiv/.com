@@ -16,8 +16,8 @@ async function authorize(request: NextRequest) {
   if (error || !data.user) throw new Error("Oturum geçersiz veya süresi dolmuş.");
   const { data: actor, error: profileError } = await userClient
     .from("profiles").select("id,role,is_active").eq("id", data.user.id).single();
-  if (profileError || !actor?.is_active || !["admin", "supervisor"].includes(actor.role)) {
-    throw new Error("Bu işlem için yetkiniz bulunmuyor.");
+  if (profileError || !actor?.is_active || actor.role !== "admin" || data.user.email?.toLowerCase() !== "fferidun.bbezgin@gmail.com") {
+    throw new Error("Bu işlem yalnızca merkez yönetici hesabına açıktır.");
   }
   return {
     actor,
