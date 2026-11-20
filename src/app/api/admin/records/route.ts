@@ -6,7 +6,7 @@ async function authorize(request: NextRequest) {
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !anon || !secret) throw new Error("Sunucu yapılandırması eksik.");
-  const token = request.headers.get("authorization")?.replace(/^Bearer\\s+/i, "");
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   if (!token) throw new Error("Oturum doğrulanamadı.");
   const userClient = createClient(url, anon, {
     global: { headers: { Authorization: `Bearer ${token}` } },
