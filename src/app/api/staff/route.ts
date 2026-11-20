@@ -59,23 +59,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Geçersiz personel rolü." }, { status: 400 });
     }
     const email = usernameToEmail(username);
-    const { data, error } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { full_name: fullName },
-    });
-    if (error || !data.user) {
-      return NextResponse.json({ error: error?.message || "Personel hesabı oluşturulamadı." }, { status: 400 });
+    const { data: existingProfile, error: existingProfileError } = await admin
+      .from("profiles").select("id,full_name,is_active").eq("username", username).maybeSingle();
+    if (existingProfileError) {
+      return NextResponse.json({ error: "Mevcut kullanıcı adı kontrol edilemedi: " + existingProfileError.message }, { status: 500 });
     }
+    if (existingProfile) {
+      return NextResponse.json({
+        error: existingProfile.is_active
+          ? "Bu kullanıcı adı zaten kullanımda. Personel listesinde mevcut bir hesap var; farklı bir kullanıcı adı seçin."
+          : "Bu kullanıcı adı daha önce oluşturulmuş ve pasif durumda. Yeni hesap açmak yerine personel listesinden bu hesabı Düzenle bölümüne girerek Aktif yapın."
+      }, { status: 409 });
+    }
+
+    // Recover an Auth account left behind by an interrupted earlier registration.
+    const { data: authPage, error: listError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (listError) return NextResponse.json({ error: "Mevcut hesap kontrol edilemedi: " + listError.message }, { status: 500 });
+    const orphan = authPage.users.find(candidate => candidate.email?.toLowerCase() === email);
+    let authUserId: string;
+    if (orphan) {
+      const { data: updated, error: updateError } = await admin.auth.admin.updateUserById(orphan.id, {
+        password,
+        email_confirm: true,
+        ban_duration: "none",
+        user_metadata: { full_name: fullName },
+      });
+      if (updateError || !updated.user) {
+        return NextResponse.json({ error: "Önceden kalmış hesap kurtarılamadı: " + (updateError?.message || "Bilinmeyen hata") }, { status: 500 });
+      }
+      authUserId = updated.user.id;
+    } else {
+      const { data, error } = await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: fullName },
+      });
+      if (error || !data.user) {
+        const duplicate = /already been registered|already exists|duplicate/i.test(error?.message || "");
+        return NextResponse.json({
+          error: duplicate
+            ? "Bu kullanıcı adı daha önce oluşturulmuş bir giriş hesabına bağlı. Personel listesinde görünmüyorsa yöneticiden destek isteyin."
+            : error?.message || "Personel hesabı oluşturulamadı."
+        }, { status: duplicate ? 409 : 400 });
+      }
+      authUserId = data.user.id;
+    }
+
     const { error: profileError } = await admin.from("profiles").upsert({
-      id: data.user.id, full_name: fullName, contact_phone: contactPhone, job_title: jobTitle, username, role, is_active: true,
+      id: authUserId, full_name: fullName, contact_phone: contactPhone, job_title: jobTitle, username, role, is_active: true,
     });
     if (profileError) {
-      await admin.auth.admin.deleteUser(data.user.id);
-      return NextResponse.json({ error: "Profil oluşturulamadı: " + profileError.message }, { status: 500 });
+      return NextResponse.json({ error: "Profil oluşturulamadı: " + profileError.message + " Giriş hesabı korundu; aynı kullanıcı adıyla tekrar deneyerek kurtarma işlemini tamamlayabilirsiniz." }, { status: 500 });
     }
-    return NextResponse.json({ ok: true, user_id: data.user.id });
+    return NextResponse.json({ ok: true, user_id: authUserId });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Beklenmeyen sunucu hatası.";
     const status = message.includes("yönetici rolüne") || message.includes("yetkiniz") ? 403 : message.includes("Oturum") ? 401 : 500;
