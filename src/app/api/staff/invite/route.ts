@@ -48,16 +48,17 @@ export async function POST(request: NextRequest) {
 
   const email = String(body.email || "").trim().toLowerCase();
   const fullName = String(body.full_name || "").trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || fullName.length < 2 || fullName.length > 120) {
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || fullName.length < 2 || fullName.length > 120) {
     return NextResponse.json({ error: "Geçerli bir e-posta ve en az 2 karakterli ad soyad girin." }, { status: 400 });
   }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://ferah-auto-service-management-ferahotomotiv.vercel.app").replace(/\\/$/, "");
   const { data, error } = await adminClient.auth.admin.inviteUserByEmail(email, {
     data: { full_name: fullName },
-    redirectTo: new URL("/login", request.url).toString(),
+    redirectTo: `${siteUrl}/login`,
   });
 
   if (error) {
