@@ -107,7 +107,8 @@ export default function DashboardPage() {
   }
 
   async function staffRequest(method:"POST"|"PATCH"|"DELETE", body:Record<string,unknown>) {
-    if(!supabase || !user || !isManager) return false;
+    if(!supabase || !user) return false;
+    if(!isAdmin) { setNotice("Personel hesaplarını yalnızca merkez yönetici yönetebilir."); return false; }
     const {data:{session}} = await supabase.auth.getSession();
     if(!session?.access_token) { setNotice("Oturum doğrulanamadı. Lütfen yeniden giriş yapın."); return false; }
     const response = await fetch("/api/staff", {
@@ -122,7 +123,8 @@ export default function DashboardPage() {
 
   async function createStaff(event:React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if(!supabase || !user || !isManager) return;
+    if(!supabase || !user) return;
+    if(!isAdmin) { setNotice("Personel ekleme yetkisi yalnızca merkez yöneticidedir."); return; }
     setStaffSaving(true); setNotice("");
     const form = new FormData(event.currentTarget);
     const ok = await staffRequest("POST", {
