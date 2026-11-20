@@ -112,7 +112,7 @@ export default function DashboardPage() {
     if(!session?.access_token) { setNotice("Oturum doğrulanamadı. Lütfen yeniden giriş yapın."); return false; }
     const response = await fetch("/api/staff", {
       method,
-      headers:{"Content-Type":"application/json","Authorization":\`Bearer \${session.access_token}\`},
+      headers:{"Content-Type":"application/json","Authorization":"Bearer " + session.access_token},
       body:JSON.stringify(body)
     });
     const result = await response.json();
