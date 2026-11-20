@@ -256,7 +256,7 @@ export default function DashboardPage() {
         "",
         "Sorgulama ekranında plakanızı ve yukarıdaki erişim kodunu girmeniz yeterlidir.",
         "FERAH OTOMOTİV"
-      ].join("\\n");
+      ].join("\n");
       if(customerPhone.length>=10 && whatsappWindow) {
         whatsappWindow.location.href = "https://wa.me/"+customerPhone+"?text="+encodeURIComponent(message);
         setNotice("Araç kaydedildi. Müşteriye gönderilecek WhatsApp mesajı hazırlandı; WhatsApp'ta Gönder'e basarak iletin.");
