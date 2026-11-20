@@ -124,7 +124,6 @@ export async function PATCH(request: NextRequest) {
       const { error } = await admin.from("profiles").update(profilePatch).eq("id", id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    if (isActive === false) await admin.auth.admin.signOut(id, "global");
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Beklenmeyen sunucu hatası.";
