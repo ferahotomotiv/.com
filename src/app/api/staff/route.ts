@@ -14,15 +14,13 @@ async function authorize(request: NextRequest) {
   const userClient = createClient(url, anon, { auth: { autoRefreshToken: false, persistSession: false } });
   const { data, error } = await userClient.auth.getUser(token);
   if (error || !data.user) throw new Error("Oturum geçersiz veya süresi dolmuş.");
-  const { data: actor, error: profileError } = await userClient
+  const admin = createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false } });
+  const { data: actor, error: profileError } = await admin
     .from("profiles").select("id,role,is_active").eq("id", data.user.id).single();
-  if (profileError || !actor?.is_active || actor.role !== "admin") {
+  if (profileError || !actor?.is_active || actor.role !== "admin" || data.user.email?.toLowerCase() !== "fferidun.bbezgin@gmail.com") {
     throw new Error("Bu işlem yalnızca merkez yönetici hesabına açıktır.");
   }
-  return {
-    actor,
-    admin: createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false } }),
-  };
+  return { actor, admin };
 }
 
 export async function POST(request: NextRequest) {
@@ -36,9 +34,9 @@ export async function POST(request: NextRequest) {
     const username = String(body.username || "").trim().toLowerCase();
     const password = String(body.password || "");
     const requestedRole = String(body.role || "mechanic");
-    const role = actor.role === "admin" ? requestedRole : "mechanic";
+    const role = requestedRole;
     if (contactPhone.length > 30) return NextResponse.json({ error: "İletişim numarası en fazla 30 karakter olabilir." }, { status: 400 });
-    if (jobTitle.length < 2 || jobTitle.length > 80) return NextResponse.json({ error: "Görev 2-80 karakter olmalıdır." }, { status: 400 });
+    if (jobTitle.length > 80) return NextResponse.json({ error: "Uzmanlık alanı en fazla 80 karakter olabilir." }, { status: 400 });
     if (fullName.length < 2 || fullName.length > 120) {
       return NextResponse.json({ error: "Ad soyad 2-120 karakter olmalıdır." }, { status: 400 });
     }
@@ -48,7 +46,7 @@ export async function POST(request: NextRequest) {
     if (password.length < 8 || password.length > 72) {
       return NextResponse.json({ error: "Şifre en az 8, en fazla 72 karakter olmalıdır." }, { status: 400 });
     }
-    if (!["admin", "supervisor", "mechanic"].includes(role)) {
+    if (!["supervisor", "mechanic"].includes(role)) {
       return NextResponse.json({ error: "Geçersiz personel rolü." }, { status: 400 });
     }
     const email = usernameToEmail(username);
@@ -103,7 +101,7 @@ export async function PATCH(request: NextRequest) {
     if (role !== undefined && actor.role !== "admin") {
       return NextResponse.json({ error: "Rol değişikliği yalnızca yönetici tarafından yapılabilir." }, { status: 403 });
     }
-    if (role !== undefined && !["admin", "supervisor", "mechanic"].includes(role)) {
+    if (role !== undefined && !["supervisor", "mechanic"].includes(role)) {
       return NextResponse.json({ error: "Geçersiz rol." }, { status: 400 });
     }
     if (username !== undefined && !usernamePattern.test(username)) {
@@ -113,7 +111,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Yeni şifre en az 8, en fazla 72 karakter olmalıdır." }, { status: 400 });
     }
     if (contactPhone !== undefined && contactPhone.length > 30) return NextResponse.json({ error: "İletişim numarası en fazla 30 karakter olabilir." }, { status: 400 });
-    if (jobTitle !== undefined && (jobTitle.length < 2 || jobTitle.length > 80)) return NextResponse.json({ error: "Görev 2-80 karakter olmalıdır." }, { status: 400 });
+    if (jobTitle !== undefined && jobTitle.length > 80) return NextResponse.json({ error: "Uzmanlık alanı en fazla 80 karakter olabilir." }, { status: 400 });
     if (fullName !== undefined && (fullName.length < 2 || fullName.length > 120)) {
       return NextResponse.json({ error: "Ad soyad 2-120 karakter olmalıdır." }, { status: 400 });
     }
