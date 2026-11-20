@@ -36,7 +36,8 @@ export async function DELETE(request: NextRequest) {
     if (type === "vehicle") {
       const { data: vehicle, error: lookupError } = await admin
         .from("vehicles").select("id,plate,photo_path").eq("id", id).single();
-      if (lookupError || !vehicle) return NextResponse.json({ error: "Araç kaydı bulunamadı." }, { status: 404 });
+      if (lookupError) return NextResponse.json({ error: "Araç kaydı okunamadı: " + lookupError.message }, { status: 500 });
+      if (!vehicle) return NextResponse.json({ error: "Bu kimlikle eşleşen araç kaydı bulunamadı." }, { status: 404 });
       if (vehicle.photo_path) {
         const { error: photoError } = await admin.storage.from("vehicle-media").remove([vehicle.photo_path]);
         if (photoError) return NextResponse.json({ error: "Araç fotoğrafı silinemedi; kayıt güvenlik için korunuyor: " + photoError.message }, { status: 500 });
@@ -48,7 +49,8 @@ export async function DELETE(request: NextRequest) {
 
     const { data: entry, error: lookupError } = await admin
       .from("financial_entries").select("id,description,amount,entry_type").eq("id", id).single();
-    if (lookupError || !entry) return NextResponse.json({ error: "Finans kaydı bulunamadı." }, { status: 404 });
+    if (lookupError) return NextResponse.json({ error: "Finans kaydı okunamadı: " + lookupError.message }, { status: 500 });
+    if (!entry) return NextResponse.json({ error: "Bu kimlikle eşleşen finans kaydı bulunamadı." }, { status: 404 });
     const { error } = await admin.from("financial_entries").delete().eq("id", id);
     if (error) return NextResponse.json({ error: "Finans kaydı silinemedi: " + error.message }, { status: 500 });
     return NextResponse.json({ ok: true, deleted: "financial_entry", label: entry.description });
