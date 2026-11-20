@@ -81,7 +81,7 @@ export default function DashboardPage() {
       supabase.from("vehicles").select("id,plate,owner_name,contact_phone,make,model,complaint,status,estimated_completion,received_at,photo_path").order("received_at",{ascending:false}).limit(100),
       supabase.from("service_jobs").select("id,vehicle_id,title,diagnosis,required_parts,mechanic_notes,status,assigned_mechanic_id,started_at,completed_at,created_at").order("created_at",{ascending:false}).limit(100),
       supabase.from("vehicle_events").select("id,vehicle_id,actor_id,title,created_at").order("created_at",{ascending:false}).limit(300),
-      supabase.from("profiles").select("id,full_name,username,contact_phone,job_title,role,is_active,last_seen_at").eq("is_active",true).order("full_name")
+      supabase.from("profiles").select("id,full_name,username,contact_phone,job_title,role,is_active,last_seen_at").order("full_name")
     ]);
     if (vehicleRes.error) setError(vehicleRes.error.message);
     setVehicles((vehicleRes.data||[]) as Vehicle[]);
@@ -427,7 +427,7 @@ export default function DashboardPage() {
             <PageHeading eyebrow="EKİP YÖNETİMİ / 04" title="Personel ekibi" subtitle="Personel hesaplarını, iletişim bilgilerini ve görevlerini merkez yönetici olarak yönetin." action={isAdmin?<button onClick={()=>setShowStaffForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Personel ekle</button>:null}/>
             <div className="card overflow-hidden">
               <div className="grid grid-cols-[1.2fr_1fr_auto] gap-3 border-b border-white/8 px-5 py-3 text-[10px] uppercase tracking-widest text-[#777f8b]"><span>Personel / Kullanıcı adı</span><span>Görev / Yetki</span><span>Hesap yönetimi</span></div>
-              {staff.filter(p=>p.is_active).map(p=>{
+              {staff.map(p=>{
                 const canEdit = p.id!==profile.id && isAdmin;
                 return <div key={p.id} className="grid grid-cols-[1.2fr_1fr_auto] items-center gap-3 border-b border-white/5 px-5 py-4 last:border-0">
                   <div className="min-w-0"><div className="truncate text-xs font-medium">{p.full_name||"İsimsiz personel"}</div><div className="mt-1 text-[10px] text-[#68717d]">@{p.username||"henüz kullanıcı adı yok"} {p.id===profile.id?"· Siz":""}</div><div className="mt-1 text-[10px] text-[#7f8792]">{p.contact_phone||"Telefon eklenmemiş"} · {p.role==="admin"?"Merkez Yönetici":p.role==="manager"?"Yönetici (Tam Yetki)":p.job_title|| (p.role==="supervisor"?"Supervisor":"Usta")}</div></div>
