@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const usernameToEmail = (username: string) => \`\${username.toLowerCase()}@staff.ferah-auto.local\`;
+const usernameToEmail = (username: string) => username.toLowerCase() + "@staff.ferah-auto.local";
 const usernamePattern = /^[a-zA-Z0-9._-]{3,32}$/;
 
 async function authorize(request: NextRequest) {
