@@ -14,7 +14,7 @@ type Role = "admin" | "supervisor" | "mechanic";
 type VehicleStatus = "intake" | "inspecting" | "waiting_parts" | "repairing" | "testing" | "ready" | "delivered" | "cancelled";
 type Vehicle = { id:string; plate:string; owner_name:string; contact_phone:string; make:string; model:string; complaint:string; status:VehicleStatus; estimated_completion:string|null; received_at:string; photo_path:string|null };
 type Job = { id:string; vehicle_id:string; title:string; diagnosis:string|null; required_parts:string|null; mechanic_notes:string|null; status:VehicleStatus; assigned_mechanic_id:string|null; started_at:string|null; completed_at:string|null; created_at:string };
-type Profile = { id:string; full_name:string; username:string|null; role:Role; is_active:boolean; last_seen_at:string|null };
+type Profile = { id:string; full_name:string; username:string|null; contact_phone:string|null; job_title:string|null; role:Role; is_active:boolean; last_seen_at:string|null };
 type Entry = { id:string; entry_type:"income"|"expense"; category:string; description:string; amount:number; entry_date:string; vehicle_id:string|null };
 type Message = { id:string; sender_id:string; recipient_id:string|null; body:string; read_at:string|null; created_at:string };
 
@@ -71,7 +71,7 @@ export default function DashboardPage() {
     const {data:{user:authUser},error:authError} = await supabase.auth.getUser();
     if (authError || !authUser) { router.replace("/login"); return; }
     setUser({id:authUser.id,email:authUser.email});
-    const {data:profileData,error:profileError} = await supabase.from("profiles").select("id,full_name,username,role,is_active,last_seen_at").eq("id",authUser.id).single();
+    const {data:profileData,error:profileError} = await supabase.from("profiles").select("id,full_name,username,contact_phone,job_title,role,is_active,last_seen_at").eq("id",authUser.id).single();
     if (profileError || !profileData || !profileData.is_active) { await supabase.auth.signOut(); router.replace("/login"); return; }
     setProfile(profileData as Profile);
 
@@ -85,7 +85,7 @@ export default function DashboardPage() {
 
     if (profileData.role === "admin" || profileData.role === "supervisor") {
       const [staffRes,entryRes] = await Promise.all([
-        supabase.from("profiles").select("id,full_name,role,is_active,last_seen_at").order("full_name"),
+        supabase.from("profiles").select("id,full_name,username,contact_phone,job_title,role,is_active,last_seen_at").order("full_name"),
         supabase.from("financial_entries").select("id,entry_type,category,description,amount,entry_date,vehicle_id").order("entry_date",{ascending:false}).limit(100)
       ]);
       setStaff((staffRes.data||[]) as Profile[]);
@@ -106,7 +106,7 @@ export default function DashboardPage() {
     router.replace("/login");
   }
 
-  async function staffRequest(method:"POST"|"PATCH", body:Record<string,unknown>) {
+  async function staffRequest(method:"POST"|"PATCH"|"DELETE", body:Record<string,unknown>) {
     if(!supabase || !user || !isManager) return false;
     const {data:{session}} = await supabase.auth.getSession();
     if(!session?.access_token) { setNotice("Oturum doğrulanamadı. Lütfen yeniden giriş yapın."); return false; }
@@ -129,7 +129,9 @@ export default function DashboardPage() {
       full_name:String(form.get("full_name")||""),
       username:String(form.get("username")||""),
       password:String(form.get("password")||""),
-      role:String(form.get("role")||"mechanic")
+      contact_phone:String(form.get("contact_phone")||""),
+      job_title:String(form.get("job_title")||""),
+      role:"mechanic"
     });
     if(ok) {
       setNotice("Personel hesabı oluşturuldu. Kullanıcı adı ve ilk şifreyi personele güvenli şekilde iletin.");
@@ -148,6 +150,8 @@ export default function DashboardPage() {
       id:editingStaff.id,
       full_name:String(form.get("full_name")||""),
       username:String(form.get("username")||""),
+      contact_phone:String(form.get("contact_phone")||""),
+      job_title:String(form.get("job_title")||""),
       role:String(form.get("role")||editingStaff.role),
       is_active:form.get("is_active")==="on"
     };
@@ -160,6 +164,20 @@ export default function DashboardPage() {
       await loadData();
     }
     setStaffSaving(false);
+  }
+
+  async function removeStaff(p:Profile) {
+    if(!isAdmin || p.id===profile?.id) return;
+    const confirmed = window.confirm(`Personel hesabı kalıcı olarak silinsin mi?\\n\\n${p.full_name} (@${p.username||"kullanıcı adı yok"}) artık giriş yapamayacak.`);
+    if(!confirmed) return;
+    setSavingStaffId(p.id);
+    const ok = await staffRequest("DELETE",{id:p.id});
+    if(ok) {
+      setNotice("Personel hesabı kaldırıldı.");
+      setStaff(current=>current.filter(item=>item.id!==p.id));
+      await loadData();
+    }
+    setSavingStaffId(null);
   }
 
   async function updateStaff(p:Profile, patch:Partial<Pick<Profile,"role"|"is_active">>) {
@@ -350,25 +368,25 @@ export default function DashboardPage() {
           {activeTab==="jobs"&&<div><PageHeading eyebrow="ATÖLYE OPERASYONU / 03" title="İş emirleri" subtitle={isManager?"Personel görevleri ve araç bazlı onarım süreci.":"Size atanan görevleri inceleyin ve işlem sonuçlarını kaydedin."} action={isManager?<button onClick={()=>setShowTaskForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Görev ata</button>:null}/><div className="grid gap-4 xl:grid-cols-2">{jobs.map(job=><JobCard key={job.id} job={job} vehicle={vehicleMap.get(job.vehicle_id)} staff={staff} isManager={!!isManager} onSave={saveJob}/>)}</div>{jobs.length===0&&<EmptyState title="Aktif iş emri bulunmuyor" text="Atölyede henüz size atanmış veya oluşturulmuş bir görev yok."/>}</div>}
 
           {activeTab==="staff"&&<div>
-            <PageHeading eyebrow="EKİP YÖNETİMİ / 04" title="Personel ekibi" subtitle="Yönetici tarafından oluşturulan kullanıcı adları, şifreler, roller ve hesap durumları." action={isAdmin?<button onClick={()=>setShowStaffForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Personel hesabı oluştur</button>:null}/>
+            <PageHeading eyebrow="EKİP YÖNETİMİ / 04" title="Personel ekibi" subtitle="Personel hesaplarını, iletişim bilgilerini ve görevlerini merkez yönetici olarak yönetin." action={isAdmin?<button onClick={()=>setShowStaffForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Personel ekle</button>:null}/>
             <div className="card overflow-hidden">
-              <div className="grid grid-cols-[1.2fr_1fr_auto] gap-3 border-b border-white/8 px-5 py-3 text-[10px] uppercase tracking-widest text-[#777f8b]"><span>Personel / Kullanıcı adı</span><span>Rol</span><span>Hesap yönetimi</span></div>
+              <div className="grid grid-cols-[1.2fr_1fr_auto] gap-3 border-b border-white/8 px-5 py-3 text-[10px] uppercase tracking-widest text-[#777f8b]"><span>Personel / Kullanıcı adı</span><span>Görev / Yetki</span><span>Hesap yönetimi</span></div>
               {staff.map(p=>{
                 const canEdit = p.id!==profile.id && isAdmin;
                 return <div key={p.id} className="grid grid-cols-[1.2fr_1fr_auto] items-center gap-3 border-b border-white/5 px-5 py-4 last:border-0">
-                  <div className="min-w-0"><div className="truncate text-xs font-medium">{p.full_name||"İsimsiz personel"}</div><div className="mt-1 text-[10px] text-[#68717d]">@{p.username||"henüz kullanıcı adı yok"} {p.id===profile.id?"· Siz":""}</div></div>
+                  <div className="min-w-0"><div className="truncate text-xs font-medium">{p.full_name||"İsimsiz personel"}</div><div className="mt-1 text-[10px] text-[#68717d]">@{p.username||"henüz kullanıcı adı yok"} {p.id===profile.id?"· Siz":""}</div><div className="mt-1 text-[10px] text-[#7f8792]">{p.contact_phone||"Telefon eklenmemiş"} · {p.job_title|| (p.role==="admin"?"Merkez Yönetici":p.role==="supervisor"?"Supervisor":"Usta")}</div></div>
                   <div>
                     {isAdmin?<select aria-label={p.full_name+" rolü"} disabled={!canEdit||savingStaffId===p.id} value={p.role} onChange={e=>void updateStaff(p,{role:e.target.value as Role})} className="w-full min-w-[112px] rounded-lg border border-white/10 bg-[#111419] px-2 py-2 text-xs text-[#d7dbe1] disabled:opacity-50"><option value="mechanic">Usta</option><option value="supervisor">Supervisor</option><option value="admin">Yönetici</option></select>:<span className="text-xs text-[#b7bdc6]">{p.role==="admin"?"Yönetici":p.role==="supervisor"?"Supervisor":"Usta"}</span>}
                   </div>
                   <div className="flex items-center justify-end gap-2">
                     <span className={`hidden rounded-full border px-2.5 py-1 text-[10px] sm:inline-flex ${p.is_active?"border-emerald-800/50 bg-emerald-950/20 text-emerald-200":"border-red-800/50 bg-red-950/20 text-red-300"}`}>{p.is_active?"Aktif":"Pasif"}</span>
-                    <button disabled={!canEdit} onClick={()=>setEditingStaff(p)} className="rounded-lg border border-white/15 px-3 py-2 text-[10px] text-white hover:bg-white/5 disabled:opacity-40">Hesabı düzenle</button>
+                    <button disabled={!canEdit||savingStaffId===p.id} onClick={()=>setEditingStaff(p)} className="rounded-lg border border-white/15 px-3 py-2 text-[10px] text-white hover:bg-white/5 disabled:opacity-40">Düzenle</button><button disabled={!canEdit||savingStaffId===p.id} onClick={()=>void removeStaff(p)} className="rounded-lg border border-red-900/50 px-3 py-2 text-[10px] text-red-300 hover:bg-red-950/30 disabled:opacity-40">{savingStaffId===p.id?"…":"Kaldır"}</button>
                   </div>
                 </div>;
               })}
-              {staff.length===0&&<EmptyState title="Personel bulunamadı" text="İlk personel davetini göndererek ekibinizi oluşturmaya başlayın."/>}
+              {staff.length===0&&<EmptyState title="Personel bulunamadı" text="Personel ekle seçeneğiyle ilk hesabı oluşturabilirsiniz."/>}
             </div>
-            <p className="mt-4 text-[11px] leading-5 text-[#707985]">Personel kullanıcı adı ve şifresi yönetici tarafından oluşturulur. Yönetici personelin adını, kullanıcı adını, rolünü, aktiflik durumunu ve şifresini sonradan değiştirebilir. Personel hesabı oluşturma, kullanıcı adı ve şifre belirleme, hesap düzenleme ve rol değişikliği yalnızca merkez yöneticiye aittir. Şifreler güvenlik nedeniyle ekranda görüntülenmez; yönetici yeni şifre belirleyebilir.</p>
+            <p className="mt-4 text-[11px] leading-5 text-[#707985]">Merkez yönetici personel hesabını oluşturur, düzenler veya kaldırır. Kullanıcı adı ve şifre yönetici tarafından belirlenir. Şifreyi sonradan değiştirmek için personel hesabını düzenleyin ve yeni şifre alanını doldurun. Kaldırılan personel artık giriş yapamaz.</p>
           </div>}
 
           {activeTab==="finance"&&isManager&&<div><PageHeading eyebrow="FİNANS YÖNETİMİ / 05" title="Gelir & gider" subtitle="Servis gelirleri, işletme masrafları ve yıllık finans geçmişi." action={<button onClick={()=>setShowExpenseForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Finans kaydı ekle</button>}/><div className="mb-5 grid gap-3 sm:grid-cols-3"><StatCard title="Toplam gelir" value={money(income)} hint="Kayıtlı gelirler" icon={TrendingUp}/><StatCard title="Toplam gider" value={money(expense)} hint="Kayıtlı harcamalar" icon={ArrowDownLeft}/><StatCard title="Net sonuç" value={money(income-expense)} hint="Gelir - gider" icon={Gauge}/></div><div className="card overflow-hidden"><div className="grid grid-cols-[1fr_1.5fr_1fr_1fr] border-b border-white/8 px-5 py-3 text-[10px] uppercase tracking-widest text-[#777f8b]"><span>Tarih</span><span>Açıklama</span><span>Kategori</span><span>Tutar</span></div>{entries.map(e=><div key={e.id} className="grid grid-cols-[1fr_1.5fr_1fr_1fr] items-center border-b border-white/5 px-5 py-4 text-xs last:border-0"><span className="text-[#929aa5]">{new Date(e.entry_date).toLocaleDateString("tr-TR")}</span><span><span className="block">{e.description}</span><span className={`mt-1 inline-block text-[10px] ${e.entry_type==="income"?"text-emerald-300":"text-red-300"}`}>{e.entry_type==="income"?"Gelir":"Gider"}</span></span><span className="text-[#aeb5bf]">{e.category}</span><span className={`font-semibold ${e.entry_type==="income"?"text-emerald-200":"text-[#e8b6b6]"}`}>{money(e.amount)}</span></div>)}{entries.length===0&&<EmptyState title="Finans kaydı bulunmuyor" text="Gelir veya gider ekleyerek finans geçmişinizi oluşturmaya başlayın."/>}</div></div>}
@@ -380,8 +398,8 @@ export default function DashboardPage() {
       </section>
     </div>
 
-    {showStaffForm&&<Modal title="Yeni personel hesabı oluştur" onClose={()=>setShowStaffForm(false)}><form onSubmit={createStaff} className="space-y-4"><div className="rounded-xl border border-white/10 bg-white/[.03] p-3 text-xs leading-5 text-[#aeb5bf]">Kullanıcı adı ve ilk şifreyi yönetici belirler. Personel e-posta daveti almadan bu bilgilerle giriş yapar.</div><Field label="Ad soyad"><input name="full_name" required minLength={2} maxLength={120} placeholder="Personelin adı ve soyadı" className="w-full px-3 py-3 text-sm"/></Field><Field label="Kullanıcı adı"><input name="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9._-]+" placeholder="ornek.kullanici" className="w-full px-3 py-3 text-sm"/></Field><Field label="İlk şifre"><input name="password" required type="password" minLength={8} maxLength={72} autoComplete="new-password" placeholder="En az 8 karakter" className="w-full px-3 py-3 text-sm"/></Field>{isAdmin&&<Field label="Personel rolü"><select name="role" className="w-full px-3 py-3 text-sm"><option value="mechanic">Usta</option><option value="supervisor">Supervisor</option><option value="admin">Yönetici</option></select></Field>}<button disabled={staffSaving} className="w-full rounded-xl bg-white py-3 text-xs font-semibold text-black disabled:opacity-50">{staffSaving?"Hesap oluşturuluyor…":"Personel hesabını oluştur"}</button></form></Modal>}
-    {editingStaff&&<Modal title="Personel hesabını düzenle" onClose={()=>setEditingStaff(null)}><form onSubmit={saveStaffAccount} className="space-y-4"><Field label="Ad soyad"><input name="full_name" required minLength={2} maxLength={120} defaultValue={editingStaff.full_name} className="w-full px-3 py-3 text-sm"/></Field><Field label="Kullanıcı adı"><input name="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9._-]+" defaultValue={editingStaff.username||""} className="w-full px-3 py-3 text-sm"/></Field><Field label="Yeni şifre (değiştirmeyeceksen boş bırak)"><input name="password" type="password" minLength={8} maxLength={72} autoComplete="new-password" placeholder="Yeni şifre belirleyin" className="w-full px-3 py-3 text-sm"/></Field>{isAdmin&&<Field label="Rol"><select name="role" defaultValue={editingStaff.role} className="w-full px-3 py-3 text-sm"><option value="mechanic">Usta</option><option value="supervisor">Supervisor</option><option value="admin">Yönetici</option></select></Field>}<label className="flex items-center gap-3 rounded-xl border border-white/10 p-3 text-xs"><input type="checkbox" name="is_active" defaultChecked={editingStaff.is_active} className="rounded"/> Hesap aktif</label><button disabled={staffSaving} className="w-full rounded-xl bg-white py-3 text-xs font-semibold text-black disabled:opacity-50">{staffSaving?"Kaydediliyor…":"Personel bilgilerini kaydet"}</button></form></Modal>}
+    {showStaffForm&&<Modal title="Yeni personel ekle" onClose={()=>setShowStaffForm(false)}><form onSubmit={createStaff} className="space-y-4"><div className="rounded-xl border border-white/10 bg-white/[.03] p-3 text-xs leading-5 text-[#aeb5bf]">Kullanıcı adı ve ilk şifreyi yönetici belirler. Personel e-posta daveti almadan bu bilgilerle giriş yapar.</div><Field label="Kullanıcı adı"><input name="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9._-]+" placeholder="ornek.kullanici" className="w-full px-3 py-3 text-sm"/></Field><Field label="Kullanıcı şifresi"><input name="password" required type="password" minLength={8} maxLength={72} autoComplete="new-password" placeholder="En az 8 karakter" className="w-full px-3 py-3 text-sm"/></Field><Field label="Ad Soyad"><input name="full_name" required minLength={2} maxLength={120} placeholder="Personelin adı ve soyadı" className="w-full px-3 py-3 text-sm"/></Field><Field label="İletişim numarası"><input name="contact_phone" type="tel" maxLength={30} placeholder="05xx xxx xx xx" className="w-full px-3 py-3 text-sm"/></Field><Field label="Görevi"><input name="job_title" required minLength={2} maxLength={80} placeholder="Örn. Şanzıman Ustası" className="w-full px-3 py-3 text-sm"/></Field><button disabled={staffSaving} className="w-full rounded-xl bg-white py-3 text-xs font-semibold text-black disabled:opacity-50">{staffSaving?"Hesap oluşturuluyor…":"Personeli kaydet"}</button></form></Modal>}
+    {editingStaff&&<Modal title="Personel hesabını düzenle" onClose={()=>setEditingStaff(null)}><form onSubmit={saveStaffAccount} className="space-y-4"><Field label="Kullanıcı adı"><input name="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9._-]+" defaultValue={editingStaff.username||""} className="w-full px-3 py-3 text-sm"/></Field><Field label="Kullanıcı şifresi (değiştirmeyeceksen boş bırak)"><input name="password" type="password" minLength={8} maxLength={72} autoComplete="new-password" placeholder="Yeni şifre belirleyin" className="w-full px-3 py-3 text-sm"/></Field><Field label="Ad Soyad"><input name="full_name" required minLength={2} maxLength={120} defaultValue={editingStaff.full_name} className="w-full px-3 py-3 text-sm"/></Field><Field label="İletişim numarası"><input name="contact_phone" type="tel" maxLength={30} defaultValue={editingStaff.contact_phone||""} className="w-full px-3 py-3 text-sm"/></Field><Field label="Görevi"><input name="job_title" required minLength={2} maxLength={80} defaultValue={editingStaff.job_title||""} className="w-full px-3 py-3 text-sm"/></Field>{isAdmin&&<Field label="Rol"><select name="role" defaultValue={editingStaff.role} className="w-full px-3 py-3 text-sm"><option value="mechanic">Usta</option><option value="supervisor">Supervisor</option><option value="admin">Yönetici</option></select></Field>}<Field label="Sistem yetkisi"><select name="role" defaultValue={editingStaff.role} className="w-full px-3 py-3 text-sm"><option value="mechanic">Personel</option><option value="supervisor">Supervisor</option><option value="admin">Yönetici</option></select></Field><label className="flex items-center gap-3 rounded-xl border border-white/10 p-3 text-xs"><input type="checkbox" name="is_active" defaultChecked={editingStaff.is_active} className="rounded"/> Hesap aktif</label><button disabled={staffSaving} className="w-full rounded-xl bg-white py-3 text-xs font-semibold text-black disabled:opacity-50">{staffSaving?"Kaydediliyor…":"Personel bilgilerini kaydet"}</button></form></Modal>}
     {showVehicleForm&&<Modal title="Yeni araç kabul kaydı" onClose={()=>setShowVehicleForm(false)}><form onSubmit={createVehicle} className="grid gap-3 sm:grid-cols-2"><Field label="Araç plakası"><input name="plate" required placeholder="34 ABC 123" className="w-full px-3 py-3 text-sm uppercase"/></Field><Field label="Araç sahibi"><input name="owner_name" required placeholder="Ad soyad" className="w-full px-3 py-3 text-sm"/></Field><Field label="Telefon numarası"><input name="contact_phone" required placeholder="05xx xxx xx xx" className="w-full px-3 py-3 text-sm"/></Field><Field label="Marka"><select name="make" required className="w-full px-3 py-3 text-sm"><option value="">Marka seçin</option>{["Volkswagen","BMW","Audi","Mercedes-Benz","Skoda","Porsche","Opel","Diğer"].map(x=><option key={x}>{x}</option>)}</select></Field><Field label="Model"><input name="model" required placeholder="Örn. Passat 2.0 TDI" className="w-full px-3 py-3 text-sm"/></Field><Field label="Araç görseli (isteğe bağlı)"><input name="photo" type="file" accept="image/*" className="w-full px-3 py-2.5 text-xs"/></Field><div className="sm:col-span-2"><Field label="Müşteri şikâyeti"><textarea name="complaint" required rows={3} placeholder="Müşterinin bildirdiği şikâyetleri yazın…" className="w-full px-3 py-3 text-sm"/></Field></div><div className="mt-2 flex justify-end gap-2 sm:col-span-2"><button type="button" onClick={()=>setShowVehicleForm(false)} className="rounded-xl border border-white/15 px-4 py-3 text-xs">Vazgeç</button><button disabled={saving} className="rounded-xl bg-white px-5 py-3 text-xs font-semibold text-black disabled:opacity-50">{saving?"Kaydediliyor…":"Aracı kaydet"}</button></div></form></Modal>}
 
     {showTaskForm&&<Modal title="Ustaya iş emri ata" onClose={()=>setShowTaskForm(false)}><form onSubmit={createTask} className="space-y-4"><Field label="Araç"><select name="vehicle_id" required className="w-full px-3 py-3 text-sm"><option value="">Araç seçin</option>{vehicles.filter(v=>!["delivered","cancelled"].includes(v.status)).map(v=><option key={v.id} value={v.id}>{v.plate} · {v.make} {v.model}</option>)}</select></Field><Field label="Sorumlu usta"><select name="mechanic_id" required className="w-full px-3 py-3 text-sm"><option value="">Usta seçin</option>{staff.filter(s=>s.role==="mechanic"&&s.is_active).map(s=><option key={s.id} value={s.id}>{s.full_name||s.id.slice(0,8)}</option>)}</select></Field><Field label="Görev başlığı"><input name="title" required placeholder="Örn. Şanzıman ilk kontrolü" className="w-full px-3 py-3 text-sm"/></Field><button disabled={saving} className="w-full rounded-xl bg-white py-3 text-xs font-semibold text-black">{saving?"Atanıyor…":"Görevi ata"}</button></form></Modal>}
