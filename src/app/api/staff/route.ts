@@ -17,8 +17,8 @@ async function authorize(request: NextRequest) {
   const admin = createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false } });
   const { data: actor, error: profileError } = await admin
     .from("profiles").select("id,role,is_active").eq("id", data.user.id).single();
-  if (profileError || !actor?.is_active || actor.role !== "admin" || data.user.email?.toLowerCase() !== "fferidun.bbezgin@gmail.com") {
-    throw new Error("Bu işlem yalnızca merkez yönetici hesabına açıktır.");
+  if (profileError || !actor || !actor.is_active || actor.role !== "admin") {
+    throw new Error("Personel yönetimi yalnızca aktif yönetici rolüne açıktır.");
   }
   return { actor, admin };
 }
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, user_id: data.user.id });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Beklenmeyen sunucu hatası.";
-    const status = message.includes("yetkiniz") ? 403 : message.includes("Oturum") ? 401 : 500;
+    const status = message.includes("yönetici rolüne") || message.includes("yetkiniz") ? 403 : message.includes("Oturum") ? 401 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
