@@ -43,6 +43,7 @@ export default function DashboardPage() {
   const [vehicles,setVehicles] = useState<Vehicle[]>([]);
   const [jobs,setJobs] = useState<Job[]>([]);
   const [staff,setStaff] = useState<Profile[]>([]);
+  const [showInactiveStaff,setShowInactiveStaff] = useState(false);
   const [entries,setEntries] = useState<Entry[]>([]);
   const [messages,setMessages] = useState<Message[]>([]);
   const [activeTab,setActiveTab] = useState("overview");
@@ -368,10 +369,10 @@ export default function DashboardPage() {
           {activeTab==="jobs"&&<div><PageHeading eyebrow="ATÖLYE OPERASYONU / 03" title="İş emirleri" subtitle={isManager?"Personel görevleri ve araç bazlı onarım süreci.":"Size atanan görevleri inceleyin ve işlem sonuçlarını kaydedin."} action={isManager?<button onClick={()=>setShowTaskForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Görev ata</button>:null}/><div className="grid gap-4 xl:grid-cols-2">{jobs.map(job=><JobCard key={job.id} job={job} vehicle={vehicleMap.get(job.vehicle_id)} staff={staff} isManager={!!isManager} onSave={saveJob}/>)}</div>{jobs.length===0&&<EmptyState title="Aktif iş emri bulunmuyor" text="Atölyede henüz size atanmış veya oluşturulmuş bir görev yok."/>}</div>}
 
           {activeTab==="staff"&&<div>
-            <PageHeading eyebrow="EKİP YÖNETİMİ / 04" title="Personel ekibi" subtitle="Personel hesaplarını, iletişim bilgilerini ve görevlerini merkez yönetici olarak yönetin." action={isAdmin?<button onClick={()=>setShowStaffForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Personel ekle</button>:null}/>
+            <PageHeading eyebrow="EKİP YÖNETİMİ / 04" title="Personel ekibi" subtitle="Personel hesaplarını, iletişim bilgilerini ve görevlerini merkez yönetici olarak yönetin." action={isAdmin?<div className="flex flex-wrap items-center gap-2"><button onClick={()=>setShowInactiveStaff(v=>!v)} className="rounded-xl border border-white/15 px-4 py-2.5 text-xs text-white">{showInactiveStaff?"Aktif personeli göster":`Pasif personel (${staff.filter(p=>!p.is_active).length})`}</button><button onClick={()=>setShowStaffForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Personel ekle</button></div>:null}/>
             <div className="card overflow-hidden">
               <div className="grid grid-cols-[1.2fr_1fr_auto] gap-3 border-b border-white/8 px-5 py-3 text-[10px] uppercase tracking-widest text-[#777f8b]"><span>Personel / Kullanıcı adı</span><span>Görev / Yetki</span><span>Hesap yönetimi</span></div>
-              {staff.map(p=>{
+              {staff.filter(p=>showInactiveStaff?!p.is_active:p.is_active).map(p=>{
                 const canEdit = p.id!==profile.id && isAdmin;
                 return <div key={p.id} className="grid grid-cols-[1.2fr_1fr_auto] items-center gap-3 border-b border-white/5 px-5 py-4 last:border-0">
                   <div className="min-w-0"><div className="truncate text-xs font-medium">{p.full_name||"İsimsiz personel"}</div><div className="mt-1 text-[10px] text-[#68717d]">@{p.username||"henüz kullanıcı adı yok"} {p.id===profile.id?"· Siz":""}</div><div className="mt-1 text-[10px] text-[#7f8792]">{p.contact_phone||"Telefon eklenmemiş"} · {p.job_title|| (p.role==="admin"?"Merkez Yönetici":p.role==="supervisor"?"Supervisor":"Usta")}</div></div>
