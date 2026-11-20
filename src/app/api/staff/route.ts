@@ -16,7 +16,7 @@ async function authorize(request: NextRequest) {
   if (error || !data.user) throw new Error("Oturum geçersiz veya süresi dolmuş.");
   const { data: actor, error: profileError } = await userClient
     .from("profiles").select("id,role,is_active").eq("id", data.user.id).single();
-  if (profileError || !actor?.is_active || actor.role !== "admin" || data.user.email?.toLowerCase() !== "fferidun.bbezgin@gmail.com") {
+  if (profileError || !actor?.is_active || actor.role !== "admin") {
     throw new Error("Bu işlem yalnızca merkez yönetici hesabına açıktır.");
   }
   return {
@@ -159,11 +159,9 @@ export async function DELETE(request: NextRequest) {
     const { data: target, error: targetError } = await admin.from("profiles").select("id,role").eq("id", id).single();
     if (targetError || !target) return NextResponse.json({ error: "Personel bulunamadı." }, { status: 404 });
     if (target.role === "admin") return NextResponse.json({ error: "Yönetici hesabı personel listesinden kaldırılamaz." }, { status: 403 });
-    const { error: authError } = await admin.auth.admin.updateUserById(id, { ban_duration: "876000h" });
+    const { error: authError } = await admin.auth.admin.deleteUser(id);
     if (authError) return NextResponse.json({ error: authError.message }, { status: 400 });
-    const { error } = await admin.from("profiles").update({ is_active: false }).eq("id", id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ ok: true, archived: true });
+    return NextResponse.json({ ok: true, deleted: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Beklenmeyen sunucu hatası.";
     const status = message.includes("yetkiniz") ? 403 : message.includes("Oturum") ? 401 : 500;
