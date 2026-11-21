@@ -86,7 +86,7 @@ export default function TrackPage() {
     <div className="mx-auto max-w-2xl">
       <a href="/login" className="inline-flex items-center gap-2 text-xs text-[#87909d] hover:text-white"><ArrowLeft size={15}/> Personel girişine dön</a>
       <div className="mb-8 mt-12 text-center">
-        <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center"><img src="/branding/Metalik%20Ferah%20Auto%20Kalkan%20Logosu.png" alt="Ferah Auto kurumsal logosu" className="h-full w-full object-contain" /></div>
+        <div className="mx-auto mb-4 flex h-32 w-56 items-center justify-center"><img src="/branding/Metalik%20Ferah%20Auto%20Kalkan%20Logosu.png" alt="Ferah Auto kurumsal logosu" className="h-full w-full object-contain" /></div>
         <div className="text-sm font-black tracking-[.24em]">FERAH AUTO</div>
         <div className="eyebrow mt-2">MÜŞTERİ ARAÇ TAKİP</div>
         <h1 className="mt-6 text-3xl font-semibold tracking-tight">Aracınızın servis durumunu öğrenin.</h1>
