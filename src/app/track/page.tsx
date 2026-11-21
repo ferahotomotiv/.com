@@ -32,6 +32,20 @@ const stages = [
 const stageIndex: Record<string,number> = {
   intake:0, inspecting:1, waiting_parts:2, repairing:3, testing:4, ready:5, delivered:6
 };
+const statusTone: Record<string,string> = {
+ intake:"border-sky-400/35 bg-sky-500/10 text-sky-200", inspecting:"border-violet-400/35 bg-violet-500/10 text-violet-200",
+ waiting_parts:"border-amber-400/35 bg-amber-500/10 text-amber-200", repairing:"border-orange-400/35 bg-orange-500/10 text-orange-200",
+ testing:"border-cyan-400/35 bg-cyan-500/10 text-cyan-200", ready:"border-lime-400/35 bg-lime-500/10 text-lime-200",
+ delivered:"border-emerald-400/35 bg-emerald-500/10 text-emerald-200", cancelled:"border-red-400/35 bg-red-500/10 text-red-200"
+};
+const statusDot: Record<string,string> = {intake:"bg-sky-400",inspecting:"bg-violet-400",waiting_parts:"bg-amber-400",repairing:"bg-orange-400",testing:"bg-cyan-400",ready:"bg-lime-400",delivered:"bg-emerald-400",cancelled:"bg-red-400"};
+function eventStatus(event:{status:string|null;title:string}) {
+ if(event.status && statusTone[event.status]) return event.status;
+ const title=event.title.toLocaleLowerCase("tr-TR");
+ if(title.includes("teslim")) return "delivered"; if(title.includes("hazır")) return "ready"; if(title.includes("test")) return "testing";
+ if(title.includes("onar")) return "repairing"; if(title.includes("parça")) return "waiting_parts"; if(title.includes("incele")) return "inspecting"; if(title.includes("iptal")) return "cancelled";
+ return "intake";
+}
 function dateText(value:string) {
   return new Date(value).toLocaleString("tr-TR",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"});
 }
@@ -89,7 +103,7 @@ export default function TrackPage() {
       {result && <section className="card mt-5 p-6 sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-5">
           <div><div className="eyebrow">ARAÇ SERVİS KAYDI</div><h2 className="mt-2 text-xl font-semibold">{result.make} {result.model}</h2><p className="mt-1 text-xs tracking-widest text-[#aeb4be]">{result.plate}</p></div>
-          <div className="flex items-center gap-2"><div className={`rounded-full border px-3 py-2 text-xs ${completion?"border-emerald-500/30 bg-emerald-500/10 text-emerald-200":closed?"border-red-500/30 bg-red-500/10 text-red-200":"border-white/15 bg-white/5"}`}>{statusLabels[result.status] || result.status}</div><button type="button" onClick={resetSearch} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-[#c5cbd4] hover:bg-white/5">Yeni sorgulama</button></div>
+          <div className="flex items-center gap-2"><div className={`rounded-full border px-3 py-2 text-xs ${statusTone[result.status]||"border-white/15 bg-white/5 text-[#d8dde5]"}`}>{statusLabels[result.status] || result.status}</div><button type="button" onClick={resetSearch} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-[#c5cbd4] hover:bg-white/5">Yeni sorgulama</button></div>
         </div>
 
         {vehiclePhotos.length>0&&<div className="mt-6">
@@ -98,7 +112,7 @@ export default function TrackPage() {
         </div>}
         <div className="mt-6 rounded-xl border border-white/8 bg-[#0d1014] p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3"><div><div className="eyebrow">SERVİS İLERLEMESİ</div><div className="mt-1 text-sm font-semibold">{closed?"Servis işlemi iptal edildi":completion?"Servis süreci tamamlandı":statusLabels[result.status]||"Servis devam ediyor"}</div></div><div className="text-sm font-semibold tabular-nums text-[#d8dde5]">{closed?"—":progress+"%"}</div></div>
-          {!closed&&<><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{width:progress+"%"}}/></div><div className="mt-5 grid grid-cols-4 gap-x-2 gap-y-4 sm:grid-cols-7">{stages.map((stage,index)=>{const done=index<=currentIndex;return <div key={stage.key} className="flex flex-col items-center gap-2 text-center"><div className={`grid h-7 w-7 place-items-center rounded-full border ${done?"border-emerald-400/50 bg-emerald-500/15 text-emerald-300":"border-white/15 text-[#626b78]"}`}>{done?<CheckCircle2 size={15}/>:<Circle size={14}/>}</div><span className={`text-[9px] leading-4 sm:text-[10px] ${done?"text-[#d5dbe3]":"text-[#69727e]"}`}>{stage.label}</span></div>})}</div></>}
+          {!closed&&<><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full ${statusDot[result.status]||"bg-white"} transition-all" style={{width:progress+"%"}}/></div><div className="mt-5 grid grid-cols-4 gap-x-2 gap-y-4 sm:grid-cols-7">{stages.map((stage,index)=>{const done=index<=currentIndex;return <div key={stage.key} className="flex flex-col items-center gap-2 text-center"><div className={`grid h-7 w-7 place-items-center rounded-full border ${done?(statusTone[stage.key]||""):"border-white/15 text-[#626b78]"}`}>{done?<CheckCircle2 size={15}/>:<Circle size={14}/>}</div><span className={`text-[9px] leading-4 sm:text-[10px] ${done?"text-[#d5dbe3]":"text-[#69727e]"}`}>{stage.label}</span></div>})}</div></>}
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -110,7 +124,7 @@ export default function TrackPage() {
 
         {result.status==="waiting_parts"&&<div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[.05] p-4"><div className="eyebrow text-amber-200">PARÇA TEDARİK BİLGİSİ</div><div className="mt-2 text-sm">{result.parts_supplier==="customer"?"Parçayı müşteri temin edecek":result.parts_supplier==="business"?"Parçayı FERAH AUTO temin edecek":"Tedarik sorumlusu henüz belirlenmedi"}</div><div className="mt-1 text-xs text-[#a5adb8]">Tahmini parça geliş zamanı: {result.parts_expected_at?dateText(result.parts_expected_at):"Henüz belirlenmedi"}</div></div>}
 
-        <div className="mt-7"><div className="eyebrow mb-4 flex items-center gap-2"><Wrench size={13}/> SERVİS İŞLEM GEÇMİŞİ</div>{result.events.length===0?<p className="text-sm text-[#828a96]">Henüz müşteriye açık bir güncelleme paylaşılmadı.</p>:<div className="relative space-y-5 before:absolute before:bottom-2 before:left-[5px] before:top-2 before:w-px before:bg-white/10">{result.events.map((event,i)=><div key={i} className="relative flex gap-4"><div className="z-10 mt-1.5 h-3 w-3 shrink-0 rounded-full border-2 border-[#090a0c] bg-emerald-400"/><div className="min-w-0"><div className="text-sm font-medium">{event.title}</div>{event.details&&<p className="mt-1 text-xs leading-5 text-[#969eaa]">{event.details}</p>}{event.actor_name&&<p className="mt-1 text-[10px] text-[#aeb7c4]">İşlemi yapan: {event.actor_name}</p>}<div className="mt-1 text-[10px] text-[#656d79]">{dateText(event.created_at)}</div></div></div>)}</div>}</div>
+        <div className="mt-7"><div className="eyebrow mb-4 flex items-center gap-2"><Wrench size={13}/> SERVİS İŞLEM GEÇMİŞİ</div>{result.events.length===0?<p className="text-sm text-[#828a96]">Henüz müşteriye açık bir güncelleme paylaşılmadı.</p>:<div className="relative space-y-5 before:absolute before:bottom-2 before:left-[5px] before:top-2 before:w-px before:bg-white/10">{result.events.map((event,i)=><div key={i} className="relative flex gap-4"><div className={`z-10 mt-1.5 h-3 w-3 shrink-0 rounded-full border-2 border-[#090a0c] ${statusDot[eventStatus(event)]||"bg-slate-400"}`}/><div className="min-w-0"><div className={`text-sm font-medium ${statusTone[eventStatus(event)]?.split(" ").find(x=>x.startsWith("text-"))||"text-white"}`}>{event.title}</div>{event.details&&<p className="mt-1 text-xs leading-5 text-[#969eaa]">{event.details}</p>}{event.actor_name&&<p className="mt-1 text-[10px] text-[#aeb7c4]">İşlemi yapan: {event.actor_name}</p>}<div className="mt-1 text-[10px] text-[#656d79]">{dateText(event.created_at)}</div></div></div>)}</div>}</div>
         <div className="mt-7 flex items-center gap-2 border-t border-white/10 pt-4 text-[10px] text-[#737b87]"><ShieldCheck size={13}/> Bu ekranda yalnızca müşteriye açık servis bilgileri gösterilir. İç personel notları ve finansal bilgiler gizlidir.</div>
       </section>}
       <p className="mt-8 text-center text-[10px] tracking-widest text-[#535a64]">FERAH OTOMOTİV · SERVICE CARE</p>
