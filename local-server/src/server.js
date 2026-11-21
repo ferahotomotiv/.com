@@ -56,6 +56,19 @@ function managerOnly(req, res, next) {
   next();
 }
 
+app.get("/", (_req, res) => res.type("html").send(`<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FERAH AUTO</title><style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0b0d10;color:#f4f5f7;font:16px Segoe UI,Arial;display:grid;place-items:center;padding:24px}
+main{width:min(620px,100%);background:#15191f;border:1px solid #2b313b;border-radius:18px;padding:32px;box-shadow:0 20px 70px #0008}
+.mark{color:#f3bd32;font-weight:800;letter-spacing:3px;font-size:14px}h1{font-size:30px;margin:12px 0}p{color:#b8c0cc;line-height:1.6}.status{display:flex;align-items:center;gap:10px;margin:24px 0;padding:14px;border-radius:10px;background:#10271d;color:#9be4b5}.dot{width:10px;height:10px;border-radius:50%;background:#39c875}
+small{color:#7f8997}code{color:#f3bd32}
+</style></head><body><main><div class="mark">FERAH AUTO</div><h1>Yerel sunucu çalışıyor</h1>
+<div class="status"><span class="dot"></span> Sunucu bağlantısı başarılı</div>
+<p>Windows sunucu bileşeni kuruldu ve yerel ağ üzerinden erişilebilir durumda.</p>
+<p><b>Önemli:</b> Araç, müşteri, servis, stok ve finans yönetim panelinin bu yerel sunucuya entegrasyonu henüz tamamlanmadı. Bu sayfa yalnızca sunucu durumunu gösterir.</p>
+<small>FERAH AUTO Local Server · <code>127.0.0.1:8787</code></small></main></body></html>`));
+
 app.get("/health", (_req, res) => res.json({
   ok: true, service: "FERAH AUTO LOCAL SERVER", version: "1.0.0",
   time: new Date().toISOString(), database: "sqlite-wal",
