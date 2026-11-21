@@ -310,11 +310,8 @@ export default function DashboardPage() {
   async function createVehicle(event:React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase || !user || !isManager) { setNotice("Bu işlem için yönetici veya supervisor yetkisi gerekiyor."); return; }
-    setSaving(true); setNotice(""); setAccessCode("");
-    let whatsappWindow: Window | null = null;
+    setSaving(true); setNotice("");
     try {
-    // Open WhatsApp synchronously from the submit gesture so popup blockers do not suppress it.
-    whatsappWindow = window.open("about:blank", "_blank");
     const form = new FormData(event.currentTarget);
     const plate = String(form.get("plate")||"").trim().toLocaleUpperCase("tr-TR");
     const rawCode = crypto.getRandomValues(new Uint8Array(10));
@@ -326,7 +323,7 @@ export default function DashboardPage() {
     const ownerName=String(form.get("owner_name")||"").trim();
     const phone=String(form.get("contact_phone")||"").trim();
     const normalizedPhone=phone.replace(/\D/g,"");
-    if(normalizedPhone.length<10){if(whatsappWindow)whatsappWindow.close();setNotice("Müşteri telefon numarasını kontrol edin.");setSaving(false);return;}
+    if(normalizedPhone.length<10){setNotice("Müşteri telefon numarasını kontrol edin.");setSaving(false);return;}
     const {data:intakeResult,error:intakeError}=await supabase.rpc("create_vehicle_intake",{
       p_plate:plate,
       p_owner_name:ownerName,
@@ -364,39 +361,11 @@ export default function DashboardPage() {
       const {error:photoDbError}=await supabase.from("vehicle_photos").insert(photoRows);
       if(photoDbError) setNotice("Fotoğraflar depolandı ancak arşiv kayıtları yazılamadı: "+photoDbError.message);
     }
-    setAccessCode(code);
-    {
-      const customerPhone = String(form.get("contact_phone")||"").replace(/\D/g,"").replace(/^0/,"90");
-      const trackingUrl = window.location.origin + "/track";
-      const statusText = "Araç kabul edildi";
-      const message = [
-        "Merhaba "+String(form.get("owner_name")||"").trim()+",",
-        "FERAH AUTO'ya aracınızın servis kaydı oluşturulmuştur.",
-        "",
-        "Plaka: "+plate,
-        "Araç: "+String(form.get("make")||"")+" "+String(form.get("model")||""),
-        "Kayıt / erişim kodu: "+code,
-        "Şu anki işlem: "+statusText,
-        "",
-        "Servis durumunu takip etmek için:",
-        trackingUrl,
-        "",
-        "Sorgulama ekranında plakanızı ve yukarıdaki erişim kodunu girmeniz yeterlidir.",
-        "FERAH OTOMOTİV"
-      ].join("\n");
-      if(customerPhone.length>=10 && whatsappWindow) {
-        whatsappWindow.location.href = "https://wa.me/"+customerPhone+"?text="+encodeURIComponent(message);
-        setNotice("Araç kaydedildi. Müşteriye gönderilecek WhatsApp mesajı hazırlandı; WhatsApp'ta Gönder'e basarak iletin.");
-      } else {
-        if(whatsappWindow) whatsappWindow.close();
-        setNotice("Araç kaydedildi ancak telefon numarası WhatsApp için uygun değil. Müşteri erişim kodunu manuel iletin.");
-      }
-    }
+    setNotice("Araç ve servis talebi oluşturuldu. Müşteri formunu iş emrinden yazdırabilirsiniz.");
     setShowVehicleForm(false);
     await loadData();
     setSaving(false);
     } catch (error) {
-      if (whatsappWindow) whatsappWindow.close();
       setNotice("Araç kaydı sırasında beklenmeyen hata: " + (error instanceof Error ? error.message : String(error)));
       setSaving(false);
     }
