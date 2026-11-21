@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Clock3, Search, ShieldCheck, Wrench, CalendarDays, CheckCircle2, Circle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -59,6 +59,8 @@ export default function TrackPage() {
   const [vehiclePhotos,setVehiclePhotos] = useState<string[]>([]);
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState("");
+
+  useEffect(()=>{ const value=new URLSearchParams(window.location.search).get("plate"); if(value) setPlate(value.toLocaleUpperCase("tr-TR")); },[]);
 
   function resetSearch() { setResult(null); setVehiclePhotos([]); setError(""); setPlate(""); window.scrollTo({top:0,behavior:"smooth"}); }
 
