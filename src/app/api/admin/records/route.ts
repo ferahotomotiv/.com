@@ -29,7 +29,7 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json();
     const type = String(body.type || "");
     const id = String(body.id || "");
-    if (!id || !["vehicle", "financial_entry"].includes(type)) {
+    if (!id || !["vehicle", "financial_entry", "customer"].includes(type)) {
       return NextResponse.json({ error: "Silinecek kayıt türü veya kimliği geçersiz." }, { status: 400 });
     }
 
@@ -71,6 +71,19 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ ok: true, deleted: "vehicle", label: vehicle.plate, deletedCustomer });
     }
 
+    if (type === "customer") {
+      const { data: customer, error: lookupError } = await admin
+        .from("customers").select("id,full_name").eq("id", id).single();
+      if (lookupError) return NextResponse.json({ error: "Müşteri kaydı okunamadı: " + lookupError.message }, { status: 500 });
+      if (!customer) return NextResponse.json({ error: "Müşteri kaydı bulunamadı." }, { status: 404 });
+      // Müşteri silinirken araç ve servis geçmişi korunur; yalnızca müşteri bağlantısı kaldırılır.
+      const { error: detachError } = await admin.from("vehicles").update({ customer_id: null }).eq("customer_id", id);
+      if (detachError) return NextResponse.json({ error: "Müşteriye bağlı araçların bağlantısı kaldırılamadı: " + detachError.message }, { status: 500 });
+      const { error: deleteError } = await admin.from("customers").delete().eq("id", id);
+      if (deleteError) return NextResponse.json({ error: "Müşteri kalıcı olarak silinemedi: " + deleteError.message }, { status: 500 });
+      return NextResponse.json({ ok: true, deleted: "customer", label: customer.full_name });
+    }
+
     const { data: entry, error: lookupError } = await admin
       .from("financial_entries").select("id,description,amount,entry_type").eq("id", id).single();
     if (lookupError) return NextResponse.json({ error: "Finans kaydı okunamadı: " + lookupError.message }, { status: 500 });
@@ -78,6 +91,39 @@ export async function DELETE(request: NextRequest) {
     const { error } = await admin.from("financial_entries").delete().eq("id", id);
     if (error) return NextResponse.json({ error: "Finans kaydı silinemedi: " + error.message }, { status: 500 });
     return NextResponse.json({ ok: true, deleted: "financial_entry", label: entry.description });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Beklenmeyen sunucu hatası.";
+    const status = message.includes("yalnızca aktif") ? 403 : message.includes("Oturum") ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const admin = await authorize(request);
+    const body = await request.json();
+    const id = String(body.id || "");
+    const full_name = String(body.full_name || "").trim();
+    const phone = String(body.phone || "").trim();
+    const normalized_phone = phone.replace(/\\D/g, "");
+    const email = String(body.email || "").trim() || null;
+    const notes = String(body.notes || "").trim() || null;
+    if (!id || full_name.length < 2 || phone.length < 7 || normalized_phone.length < 7) {
+      return NextResponse.json({ error: "Ad soyad ve geçerli telefon numarası zorunludur." }, { status: 400 });
+    }
+    const { data: customer, error: lookupError } = await admin.from("customers").select("id").eq("id", id).single();
+    if (lookupError || !customer) return NextResponse.json({ error: "Müşteri kaydı bulunamadı." }, { status: 404 });
+    const { data, error } = await admin.from("customers")
+      .update({ full_name, phone, normalized_phone, email, notes })
+      .eq("id", id).select("id,full_name,phone,email,notes").single();
+    if (error) {
+      const duplicate = error.code === "23505";
+      return NextResponse.json({ error: duplicate ? "Bu telefon numarası başka bir müşteri kaydında kullanılıyor." : "Müşteri bilgileri güncellenemedi: " + error.message }, { status: 400 });
+    }
+    const { error: vehicleError } = await admin.from("vehicles")
+      .update({ owner_name: full_name, contact_phone: phone }).eq("customer_id", id);
+    if (vehicleError) return NextResponse.json({ ok: true, customer: data, warning: "Müşteri güncellendi ancak bağlı araçların iletişim bilgileri eşitlenemedi: " + vehicleError.message });
+    return NextResponse.json({ ok: true, customer: data });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Beklenmeyen sunucu hatası.";
     const status = message.includes("yalnızca aktif") ? 403 : message.includes("Oturum") ? 401 : 500;
