@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 type Result = {
   plate: string; make: string; model: string; status: string;
   estimated_completion: string | null; received_at: string;
-  assigned_staff_name?: string | null;
+  assigned_staff_name?: string | null;\n  parts_supplier?: string | null;\n  parts_expected_at?: string | null;
   events: { title: string; details: string | null; status: string | null; created_at: string }[];
 };
 
@@ -92,6 +92,8 @@ export default function TrackPage() {
           <div className="flex items-start gap-3 rounded-xl border border-white/8 bg-white/[.03] p-4"><Clock3 size={17} className="mt-0.5 text-[#aeb7c4]"/><div><div className="eyebrow">TAHMİNİ TESLİM</div><div className="mt-1 text-sm">{result.estimated_completion?dateText(result.estimated_completion):"Henüz belirlenmedi"}</div></div></div>
           <div className="flex items-start gap-3 rounded-xl border border-white/8 bg-white/[.03] p-4 sm:col-span-2"><UserRound size={17} className="mt-0.5 text-[#aeb7c4]"/><div><div className="eyebrow">SORUMLU SERVİS PERSONELİ</div><div className="mt-1 text-sm">{result.assigned_staff_name||"Henüz atanmadı"}</div></div></div>
         </div>
+
+        {result.status==="waiting_parts"&&<div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[.05] p-4"><div className="eyebrow text-amber-200">PARÇA TEDARİK BİLGİSİ</div><div className="mt-2 text-sm">{result.parts_supplier==="customer"?"Parçayı müşteri temin edecek":result.parts_supplier==="business"?"Parçayı FERAH AUTO temin edecek":"Tedarik sorumlusu henüz belirlenmedi"}</div><div className="mt-1 text-xs text-[#a5adb8]">Tahmini parça geliş zamanı: {result.parts_expected_at?dateText(result.parts_expected_at):"Henüz belirlenmedi"}</div></div>}
 
         <div className="mt-7"><div className="eyebrow mb-4 flex items-center gap-2"><Wrench size={13}/> SERVİS İŞLEM GEÇMİŞİ</div>{result.events.length===0?<p className="text-sm text-[#828a96]">Henüz müşteriye açık bir güncelleme paylaşılmadı.</p>:<div className="relative space-y-5 before:absolute before:bottom-2 before:left-[5px] before:top-2 before:w-px before:bg-white/10">{result.events.map((event,i)=><div key={i} className="relative flex gap-4"><div className="z-10 mt-1.5 h-3 w-3 shrink-0 rounded-full border-2 border-[#090a0c] bg-emerald-400"/><div className="min-w-0"><div className="text-sm font-medium">{event.title}</div>{event.details&&<p className="mt-1 text-xs leading-5 text-[#969eaa]">{event.details}</p>}<div className="mt-1 text-[10px] text-[#656d79]">{dateText(event.created_at)}</div></div></div>)}</div>}</div>
         <div className="mt-7 flex items-center gap-2 border-t border-white/10 pt-4 text-[10px] text-[#737b87]"><ShieldCheck size={13}/> Bu ekranda yalnızca müşteriye açık servis bilgileri gösterilir. İç personel notları ve finansal bilgiler gizlidir.</div>
