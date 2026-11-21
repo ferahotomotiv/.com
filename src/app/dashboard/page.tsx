@@ -59,6 +59,7 @@ export default function DashboardPage() {
   const [staff,setStaff] = useState<Profile[]>([]);
   const [entries,setEntries] = useState<Entry[]>([]);
   const [inventoryProducts,setInventoryProducts] = useState<InventoryProduct[]>([]);
+  const [editingInventoryProduct,setEditingInventoryProduct] = useState<InventoryProduct|null>(null);
   const [procurementItems,setProcurementItems] = useState<ProcurementItem[]>([]);
   const [messages,setMessages] = useState<Message[]>([]);
   const [activeTab,setActiveTab] = useState("overview");
@@ -407,6 +408,50 @@ export default function DashboardPage() {
     const initial=Number(f.get("initial_quantity")||0);
     if(initial>0){const {error:stockError}=await supabase.rpc("record_inventory_stock_in",{p_product_id:data.id,p_quantity:initial,p_unit_cost:cost,p_notes:"İlk stok girişi"});if(stockError){setNotice("Ürün açıldı ancak ilk stok eklenemedi: "+stockError.message);await loadData();setSaving(false);return;}}
     setNotice("Stok ürün kartı oluşturuldu."); await loadData(); setSaving(false);
+  }
+
+  async function updateInventoryProduct(event:React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if(!supabase||!user||!isManager||!editingInventoryProduct) return;
+    setSaving(true);
+    const f=new FormData(event.currentTarget);
+    const name=String(f.get("name")||"").trim();
+    const sku=String(f.get("sku")||"").trim();
+    const unit=String(f.get("unit")||"adet");
+    const cost=Number(f.get("unit_cost")||0);
+    const min=Number(f.get("min_quantity")||0);
+    if(!name||!Number.isFinite(cost)||cost<0||!Number.isFinite(min)||min<0) {
+      setNotice("Ürün adı, birim maliyet ve minimum stok değerlerini kontrol edin.");
+      setSaving(false); return;
+    }
+    const {error}=await supabase.from("inventory_products").update({
+      name,sku:sku||null,unit,unit_cost:cost,min_quantity:min,updated_at:new Date().toISOString()
+    }).eq("id",editingInventoryProduct.id);
+    if(error) setNotice("Ürün bilgileri güncellenemedi: "+error.message);
+    else {setNotice("Stok ürün bilgileri güncellendi.");setEditingInventoryProduct(null);await loadData();}
+    setSaving(false);
+  }
+
+  async function permanentlyDeleteInventoryProduct(product:InventoryProduct) {
+    if(!supabase||!user||!isManager) return;
+    if(!window.confirm('"'+product.name+'" ürün kartı kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam edilsin mi?')) return;
+    setSaving(true);
+    const [movementRes,itemRes]=await Promise.all([
+      supabase.from("inventory_movements").select("id",{count:"exact",head:true}).eq("product_id",product.id),
+      supabase.from("service_job_procurement_items").select("id",{count:"exact",head:true}).eq("inventory_product_id",product.id)
+    ]);
+    if(movementRes.error||itemRes.error) {
+      setNotice("Ürünün geçmiş hareketleri doğrulanamadı; güvenlik için silme durduruldu. "+(movementRes.error?.message||itemRes.error?.message||""));
+      setSaving(false); return;
+    }
+    if((movementRes.count||0)>0||(itemRes.count||0)>0) {
+      setNotice("Bu ürün geçmiş stok hareketlerinde veya servis iş emirlerinde kullanılmış. Finans ve servis geçmişi bozulmaması için kalıcı silme yapılamaz. Ürünü pasife alma özelliğini kullanabilirsiniz.");
+      setSaving(false); return;
+    }
+    const {error}=await supabase.from("inventory_products").delete().eq("id",product.id);
+    if(error) setNotice("Ürün silinemedi: "+error.message);
+    else {setNotice('"'+product.name+'" ürün kartı kalıcı olarak silindi.');if(editingInventoryProduct?.id===product.id)setEditingInventoryProduct(null);await loadData();}
+    setSaving(false);
   }
 
   async function addInventoryStock(event:React.FormEvent<HTMLFormElement>) {
@@ -843,7 +888,8 @@ export default function DashboardPage() {
             <PageHeading eyebrow="STOK / TEDARİK YÖNETİMİ" title="İşletme deposu" subtitle="Ürün kartları, mevcut miktarlar, alış maliyetleri ve stok hareketleri."/>
             <div className="card mb-5 p-5"><div className="eyebrow mb-3">YENİ ÜRÜN KARTI</div><form onSubmit={createInventoryProduct} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"><Field label="Ürün adı"><input name="name" required placeholder="Örn. Şanzıman yağı 75W-90" className="w-full px-3 py-3 text-xs"/></Field><Field label="Stok kodu (isteğe bağlı)"><input name="sku" placeholder="SKU / ürün kodu" className="w-full px-3 py-3 text-xs"/></Field><Field label="Birim"><select name="unit" className="w-full px-3 py-3 text-xs"><option value="adet">Adet</option><option value="litre">Litre</option><option value="takım">Takım</option><option value="kg">Kg</option><option value="kutu">Kutu</option></select></Field><Field label="Birim alış maliyeti (₺)"><input name="unit_cost" type="number" min="0" step="0.01" defaultValue="0" className="w-full px-3 py-3 text-xs"/></Field><Field label="Minimum stok uyarısı"><input name="min_quantity" type="number" min="0" step="0.01" defaultValue="0" className="w-full px-3 py-3 text-xs"/></Field><Field label="İlk stok miktarı"><input name="initial_quantity" type="number" min="0" step="0.01" defaultValue="0" className="w-full px-3 py-3 text-xs"/></Field><button disabled={saving} className="rounded-xl bg-white px-4 py-3 text-xs font-semibold text-black sm:col-span-2 xl:col-span-3">{saving?"Kaydediliyor…":"Ürün kartını oluştur"}</button></form></div>
             <div className="card mb-5 p-5"><div className="eyebrow mb-3">STOĞA ÜRÜN GİRİŞİ</div><form onSubmit={addInventoryStock} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Field label="Ürün"><select name="product_id" required className="w-full px-3 py-3 text-xs"><option value="">Ürün seçin</option>{inventoryProducts.map(p=><option key={p.id} value={p.id}>{p.name} · Mevcut: {p.quantity} {p.unit}</option>)}</select></Field><Field label="Giriş miktarı"><input name="quantity" type="number" min="0.01" step="0.01" required className="w-full px-3 py-3 text-xs"/></Field><Field label="Güncel birim alış fiyatı (₺)"><input name="unit_cost" type="number" min="0" step="0.01" defaultValue="0" className="w-full px-3 py-3 text-xs"/></Field><Field label="Açıklama"><input name="notes" placeholder="Fatura / tedarik notu" className="w-full px-3 py-3 text-xs"/></Field><button disabled={saving} className="rounded-xl bg-white px-4 py-3 text-xs font-semibold text-black sm:col-span-2 xl:col-span-4">{saving?"Ekleniyor…":"Stok girişini kaydet"}</button></form></div>
-            <div className="card overflow-hidden"><div className="border-b border-white/8 p-5"><div className="eyebrow">MEVCUT STOK</div><div className="mt-1 text-xs text-[#8a94a1]">{inventoryProducts.length} aktif ürün kartı</div></div>{inventoryProducts.map(product=><div key={product.id} className="grid gap-3 border-b border-white/5 p-5 last:border-0 md:grid-cols-[1.5fr_.7fr_.8fr_1.5fr] md:items-center"><div><div className="text-sm font-medium">{product.name}</div><div className="mt-1 text-[10px] text-[#7e8996]">{product.sku||"Stok kodu yok"} · {product.unit}</div></div><div><div className="eyebrow">MEVCUT MİKTAR</div><div className={`mt-1 text-sm font-semibold ${product.quantity<=product.min_quantity?"text-amber-300":"text-emerald-300"}`}>{product.quantity} {product.unit}</div></div><div><div className="eyebrow">BİRİM ALIŞ</div><div className="mt-1 text-xs">{money(Number(product.unit_cost))}</div></div><div className="text-[10px] text-[#818b98]">{product.quantity<=product.min_quantity?"Düşük stok · yeniden tedarik gerekli":"Stok yeterli"}</div></div>)}{inventoryProducts.length===0&&<EmptyState title="Stok ürünü bulunamadı" text="İlk ürün kartını oluşturarak işletme deposunu kullanmaya başlayın."/>}</div>
+            {editingInventoryProduct&&<div className="card mb-5 p-5"><div className="mb-4 flex items-center justify-between gap-3"><div><div className="eyebrow">STOK KARTINI DÜZENLE</div><div className="mt-1 text-sm font-semibold">{editingInventoryProduct.name}</div></div><button type="button" onClick={()=>setEditingInventoryProduct(null)} className="rounded-lg border border-white/15 px-3 py-2 text-xs">Vazgeç</button></div><form onSubmit={updateInventoryProduct} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"><Field label="Ürün adı"><input name="name" required defaultValue={editingInventoryProduct.name} className="w-full px-3 py-3 text-xs"/></Field><Field label="Stok kodu"><input name="sku" defaultValue={editingInventoryProduct.sku||""} className="w-full px-3 py-3 text-xs"/></Field><Field label="Birim"><select name="unit" defaultValue={editingInventoryProduct.unit} className="w-full px-3 py-3 text-xs"><option value="adet">Adet</option><option value="litre">Litre</option><option value="takım">Takım</option><option value="kg">Kg</option><option value="kutu">Kutu</option></select></Field><Field label="Birim alış maliyeti (₺)"><input name="unit_cost" type="number" min="0" step="0.01" defaultValue={editingInventoryProduct.unit_cost} className="w-full px-3 py-3 text-xs"/></Field><Field label="Minimum stok uyarısı"><input name="min_quantity" type="number" min="0" step="0.01" defaultValue={editingInventoryProduct.min_quantity} className="w-full px-3 py-3 text-xs"/></Field><div className="flex items-end"><button disabled={saving} className="w-full rounded-xl bg-white px-4 py-3 text-xs font-semibold text-black">{saving?"Kaydediliyor…":"Değişiklikleri kaydet"}</button></div></form><p className="mt-3 text-[10px] text-[#7d8793]">Mevcut miktar stok hareketleriyle yönetilir; miktarı değiştirmek için stok giriş/çıkış işlemlerini kullanın.</p></div>}
+            <div className="card overflow-hidden"><div className="border-b border-white/8 p-5"><div className="eyebrow">MEVCUT STOK</div><div className="mt-1 text-xs text-[#8a94a1]">{inventoryProducts.length} aktif ürün kartı</div></div>{inventoryProducts.map(product=><div key={product.id} className="grid gap-3 border-b border-white/5 p-5 last:border-0 md:grid-cols-[1.5fr_.7fr_.8fr_1.5fr] md:items-center"><div><div className="text-sm font-medium">{product.name}</div><div className="mt-1 text-[10px] text-[#7e8996]">{product.sku||"Stok kodu yok"} · {product.unit}</div></div><div><div className="eyebrow">MEVCUT MİKTAR</div><div className={`mt-1 text-sm font-semibold ${product.quantity<=product.min_quantity?"text-amber-300":"text-emerald-300"}`}>{product.quantity} {product.unit}</div></div><div><div className="eyebrow">BİRİM ALIŞ</div><div className="mt-1 text-xs">{money(Number(product.unit_cost))}</div></div><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[10px] text-[#818b98]">{product.quantity<=product.min_quantity?"Düşük stok · yeniden tedarik gerekli":"Stok yeterli"}</span><div className="flex gap-2"><button type="button" onClick={()=>setEditingInventoryProduct(product)} className="rounded-lg border border-white/15 px-3 py-2 text-[10px] text-white hover:bg-white/5">Düzenle</button><button type="button" disabled={saving} onClick={()=>void permanentlyDeleteInventoryProduct(product)} className="rounded-lg border border-red-500/30 px-3 py-2 text-[10px] text-red-300 hover:bg-red-500/10 disabled:opacity-50">Kalıcı sil</button></div></div></div>)}{inventoryProducts.length===0&&<EmptyState title="Stok ürünü bulunamadı" text="İlk ürün kartını oluşturarak işletme deposunu kullanmaya başlayın."/>}</div>
           </div>}
           {activeTab==="staff"&&<div>
             <PageHeading eyebrow="EKİP YÖNETİMİ / 04" title="Personel ekibi" subtitle="Personel hesaplarını, iletişim bilgilerini ve görevlerini merkez yönetici olarak yönetin." action={isAdmin?<button onClick={()=>setShowStaffForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Personel ekle</button>:null}/>
