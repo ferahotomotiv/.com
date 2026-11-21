@@ -13,11 +13,11 @@ import { createClient } from "@/lib/supabase/client";
 type Role = "admin" | "manager" | "supervisor" | "mechanic";
 type VehicleStatus = "intake" | "inspecting" | "waiting_parts" | "repairing" | "testing" | "ready" | "delivered" | "cancelled";
 type Vehicle = { id:string; plate:string; owner_name:string; contact_phone:string; make:string; model:string; complaint:string; status:VehicleStatus; estimated_completion:string|null; received_at:string; photo_path:string|null };
-type Job = { id:string; vehicle_id:string; title:string; diagnosis:string|null; required_parts:string|null; mechanic_notes:string|null; status:VehicleStatus; assigned_mechanic_id:string|null; started_at:string|null; completed_at:string|null; created_at:string };
+type Job = { id:string; vehicle_id:string; title:string; diagnosis:string|null; required_parts:string|null; mechanic_notes:string|null; parts_supplier:string|null; parts_expected_at:string|null; status:VehicleStatus; assigned_mechanic_id:string|null; started_at:string|null; completed_at:string|null; created_at:string };
 type Profile = { id:string; full_name:string; username:string|null; contact_phone:string|null; job_title:string|null; role:Role; is_active:boolean; last_seen_at:string|null };
 type Entry = { id:string; entry_type:"income"|"expense"; category:string; description:string; amount:number; entry_date:string; vehicle_id:string|null };
 type Message = { id:string; sender_id:string; recipient_id:string|null; body:string; read_at:string|null; created_at:string };
-type VehicleEvent = { id:string; vehicle_id:string; actor_id:string|null; title:string; created_at:string };
+type VehicleEvent = { id:string; vehicle_id:string; actor_id:string|null; title:string; details:string|null; status:VehicleStatus|null; event_type:string; customer_visible:boolean; created_at:string };
 
 const statusLabels: Record<VehicleStatus,string> = {
   intake:"Araç kabul", inspecting:"İnceleniyor", waiting_parts:"Parça bekliyor",
@@ -55,7 +55,7 @@ export default function DashboardPage() {
   const [showTaskForm,setShowTaskForm] = useState(false);
   const [showExpenseForm,setShowExpenseForm] = useState(false);
   const [accessCode,setAccessCode] = useState("");
-  const [saving,setSaving] = useState(false);
+  const [saving,setSaving] = useState(false);\n  const [selectedJobVehicleId,setSelectedJobVehicleId] = useState<string>("");
   const [notice,setNotice] = useState("");
   const [messageText,setMessageText] = useState("");
   const [recipient,setRecipient] = useState("all");
@@ -79,8 +79,8 @@ export default function DashboardPage() {
 
     const [vehicleRes,jobRes,eventRes,staffRes] = await Promise.all([
       supabase.from("vehicles").select("id,plate,owner_name,contact_phone,make,model,complaint,status,estimated_completion,received_at,photo_path").order("received_at",{ascending:false}).limit(100),
-      supabase.from("service_jobs").select("id,vehicle_id,title,diagnosis,required_parts,mechanic_notes,status,assigned_mechanic_id,started_at,completed_at,created_at").order("created_at",{ascending:false}).limit(100),
-      supabase.from("vehicle_events").select("id,vehicle_id,actor_id,title,created_at").order("created_at",{ascending:false}).limit(300),
+      supabase.from("service_jobs").select("id,vehicle_id,title,diagnosis,required_parts,mechanic_notes,parts_supplier,parts_expected_at,status,assigned_mechanic_id,started_at,completed_at,created_at").order("created_at",{ascending:false}).limit(200),
+      supabase.from("vehicle_events").select("id,vehicle_id,actor_id,title,details,status,event_type,customer_visible,created_at").order("created_at",{ascending:false}).limit(500),
       supabase.from("profiles").select("id,full_name,username,contact_phone,job_title,role,is_active,last_seen_at").order("full_name")
     ]);
     if (vehicleRes.error) setError(vehicleRes.error.message);
@@ -278,31 +278,19 @@ export default function DashboardPage() {
     const vehicleId = String(f.get("vehicle_id"));
     const assignedMechanicId = String(f.get("mechanic_id"));
     const title = String(f.get("title"));
-    // Vehicle intake already creates a placeholder job. Reuse it instead of showing
-    // a second, conflicting "Araç kabul / ilk inceleme" card for the same vehicle.
-    const {data:placeholder,error:placeholderError} = await supabase
-      .from("service_jobs").select("id")
-      .eq("vehicle_id",vehicleId).eq("title","Araç kabul / ilk inceleme")
-      .order("created_at",{ascending:false}).limit(1).maybeSingle();
-    if(placeholderError) {
-      setNotice("Mevcut araç iş emri kontrol edilemedi: "+placeholderError.message);
-      setSaving(false);
-      return;
-    }
-    const result = placeholder
-      ? await supabase.from("service_jobs").update({
-          assigned_mechanic_id:assignedMechanicId,title,status:"inspecting",created_by:user.id
-        }).eq("id",placeholder.id)
-      : await supabase.from("service_jobs").insert({
-          vehicle_id:vehicleId,assigned_mechanic_id:assignedMechanicId,
-          title,created_by:user.id,status:"inspecting"
-        });
+    const {data:existing,error:existingError} = await supabase.from("service_jobs")
+      .select("id,assigned_mechanic_id,title").eq("vehicle_id",vehicleId)
+      .not("status","in","(delivered,cancelled)").order("created_at",{ascending:false}).limit(1).maybeSingle();
+    if(existingError) { setNotice("Aktif iş emri kontrol edilemedi: "+existingError.message); setSaving(false); return; }
+    const result = existing
+      ? await supabase.from("service_jobs").update({assigned_mechanic_id:assignedMechanicId,title}).eq("id",existing.id)
+      : await supabase.from("service_jobs").insert({vehicle_id:vehicleId,assigned_mechanic_id:assignedMechanicId,title,created_by:user.id,status:"inspecting"});
     if(result.error) setNotice(result.error.message);
     else {
-      await supabase.from("vehicles").update({status:"inspecting"}).eq("id",vehicleId);
-      setNotice(placeholder?"İlk inceleme iş emri güncellendi ve personele atandı.":"Yeni iş emri personele atandı.");
-      setShowTaskForm(false);
-      await loadData();
+      const assignee = staff.find(s=>s.id===assignedMechanicId)?.full_name || "Personel";
+      await supabase.from("vehicle_events").insert({vehicle_id:vehicleId,actor_id:user.id,event_type:"assignment",title:"Sorumlu personel atandı",details:assignee+" aktif servis sorumlusu olarak görevlendirildi.",status:"inspecting",customer_visible:false});
+      setNotice(existing?"Mevcut iş emrinin sorumlusu güncellendi.":"Yeni iş emri oluşturuldu ve personele atandı.");
+      setShowTaskForm(false); await loadData();
     }
     setSaving(false);
   }
@@ -310,28 +298,34 @@ export default function DashboardPage() {
   async function saveJob(job:Job, form:HTMLFormElement) {
     if(!supabase || !user) return;
     const linkedVehicle = vehicles.find(v=>v.id===job.vehicle_id);
-    if(linkedVehicle && ["delivered","cancelled"].includes(linkedVehicle.status)) {
-      setNotice("Teslim edilmiş veya iptal edilmiş aracın iş emri kapalıdır. Düzenlemek için Admin veya Yönetici servisi yeniden açmalıdır.");
-      return;
-    }
+    if(linkedVehicle && ["delivered","cancelled"].includes(linkedVehicle.status)) { setNotice("Teslim edilmiş veya iptal edilmiş aracın iş emri kapalıdır."); return; }
     const f = new FormData(form);
-    const nextStatus = String(f.get("status")) as VehicleStatus;
-    const diagnosis = String(f.get("diagnosis")||"");
-    const requiredParts = String(f.get("required_parts")||"");
-    const mechanicNotes = String(f.get("mechanic_notes")||"");
-    const patch:Record<string,unknown> = {status:nextStatus,diagnosis,required_parts:requiredParts,mechanic_notes:mechanicNotes};
-    if(nextStatus==="repairing" && !job.started_at) patch.started_at = new Date().toISOString();
-    if(nextStatus==="ready" || nextStatus==="testing") patch.completed_at = null;
-    const {error:updateError} = await supabase.from("service_jobs").update(patch).eq("id",job.id);
+    const requestedStage = String(f.get("next_status")||"");
+    const transitions:Record<string,string[]> = {inspecting:["waiting_parts","repairing"],waiting_parts:["repairing"],repairing:["testing"],testing:["ready"],ready:["delivered"]};
+    if(requestedStage && !(transitions[job.status]||[]).includes(requestedStage)) { setNotice("Bu aşamaya doğrudan geçilemez. Sıradaki aşamayı seçin."); return; }
+    const diagnosis=String(f.get("diagnosis")||"").trim();
+    const requiredParts=String(f.get("required_parts")||"").trim();
+    const mechanicNotes=String(f.get("mechanic_notes")||"").trim();
+    const partsSupplier=String(f.get("parts_supplier")||"");
+    const partsExpectedRaw=String(f.get("parts_expected_at")||"");
+    if(job.status==="waiting_parts" && (!partsSupplier || !partsExpectedRaw)) { setNotice("Parça bekleniyor aşamasında temin sorumlusu ve tahmini geliş zamanı zorunludur."); return; }
+    const nextStatus=(requestedStage||job.status) as VehicleStatus;
+    const patch:Record<string,unknown>={diagnosis,required_parts:requiredParts,mechanic_notes:mechanicNotes,parts_supplier:partsSupplier||null,parts_expected_at:partsExpectedRaw?new Date(partsExpectedRaw).toISOString():null};
+    if(requestedStage) patch.status=nextStatus;
+    if(nextStatus==="repairing" && !job.started_at) patch.started_at=new Date().toISOString();
+    if(nextStatus==="delivered" && requestedStage) patch.completed_at=new Date().toISOString();
+    const {error:updateError}=await supabase.from("service_jobs").update(patch).eq("id",job.id);
     if(updateError) { setNotice(updateError.message); return; }
-    const {error:vehicleStatusError} = await supabase.from("vehicles").update({status:nextStatus}).eq("id",job.vehicle_id);
-    if(vehicleStatusError) { setNotice("İş emri güncellendi ancak araç durumu güncellenemedi: "+vehicleStatusError.message); await loadData(); return; }
-    await supabase.from("vehicle_events").insert({
-      vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"job_update",
-      title:statusLabels[nextStatus],details:diagnosis || mechanicNotes || "Servis kaydı güncellendi.",
-      status:nextStatus,customer_visible:isManager
-    });
-    await loadData(); setNotice("İş emri güncellendi.");
+    if(requestedStage) {
+      const vehiclePatch:Record<string,unknown>={status:nextStatus};
+      if(nextStatus==="delivered") vehiclePatch.delivered_at=new Date().toISOString();
+      const {error:vehicleError}=await supabase.from("vehicles").update(vehiclePatch).eq("id",job.vehicle_id);
+      if(vehicleError) { setNotice("İş emri güncellendi ancak araç durumu güncellenemedi: "+vehicleError.message); await loadData(); return; }
+      const safeDetails=nextStatus==="waiting_parts"?"Gerekli parçanın temini planlandı.":nextStatus==="ready"?"Servis işlemleri tamamlandı; araç teslim için hazır.":nextStatus==="delivered"?"Araç müşteriye teslim edildi.":"Aracın servis aşaması güncellendi.";
+      const {error:eventError}=await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"stage",title:statusLabels[nextStatus],details:safeDetails,status:nextStatus,customer_visible:true});
+      setNotice(eventError?"Aşama ilerletildi ancak işlem geçmişi yazılamadı: "+eventError.message:"Servis aşaması ilerletildi; işlemi yapan personel kaydedildi.");
+    } else setNotice("İş emri detayları kaydedildi. Servis aşaması değişmedi.");
+    await loadData();
   }
 
   async function addEntry(event:React.FormEvent<HTMLFormElement>) {
