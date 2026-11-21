@@ -1,45 +1,35 @@
 $ErrorActionPreference = "Stop"
 $WindowsDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $WindowsDir
-$RuntimeDir = Join-Path $WindowsDir "runtime"
+$DesktopDir = Join-Path $RepoRoot "desktop"
+$AppDir = Join-Path $WindowsDir "app"
 $ReleaseDir = Join-Path $RepoRoot "release"
-$NodeVersion = "v22.23.5"
-$Zip = Join-Path $env:TEMP "ferah-auto-node-$NodeVersion-win-x64.zip"
-$Extract = Join-Path $env:TEMP "node-$NodeVersion-win-x64"
 
-New-Item -ItemType Directory -Force -Path $RuntimeDir,$ReleaseDir | Out-Null
-if (-not (Test-Path (Join-Path $RuntimeDir "node.exe"))) {
-  $url = "https://nodejs.org/dist/$NodeVersion/node-$NodeVersion-win-x64.zip"
-  Invoke-WebRequest -Uri $url -OutFile $Zip
-  if (Test-Path $Extract) { Remove-Item $Extract -Recurse -Force }
-  Expand-Archive -Path $Zip -DestinationPath $env:TEMP -Force
-  Copy-Item (Join-Path $Extract "node.exe") $RuntimeDir -Force
-  Copy-Item (Join-Path $Extract "npm.cmd") $RuntimeDir -Force
-  Copy-Item (Join-Path $Extract "npm") $RuntimeDir -Recurse -Force
-  Copy-Item (Join-Path $Extract "node_modules") $RuntimeDir -Recurse -Force
-}
-$node = Join-Path $RuntimeDir "node.exe"
-$npm = Join-Path $RuntimeDir "npm.cmd"
-if (-not (Test-Path $node) -or -not (Test-Path $npm)) { throw "Bundled Node.js build runtime is incomplete." }
+New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
+if (Test-Path $AppDir) { Remove-Item $AppDir -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 
-$oldPath = $env:PATH
-$env:PATH = "$RuntimeDir;$oldPath"
 Push-Location $RepoRoot
 try {
-  & $npm install --no-audit --no-fund
-  if ($LASTEXITCODE -ne 0) { throw "Frontend dependency installation failed." }
-  & $npm run build
-  if ($LASTEXITCODE -ne 0) { throw "Next.js production build failed." }
-} finally { Pop-Location; $env:PATH = $oldPath }
+  npm install --no-audit --no-fund
+  if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
+  npm install --no-save --no-audit --no-fund electron@22.3.27
+  if ($LASTEXITCODE -ne 0) { throw "Electron runtime installation failed." }
+} finally { Pop-Location }
 
-$standalone = Join-Path $RepoRoot ".next\standalone"
-if (-not (Test-Path (Join-Path $standalone "server.js"))) { throw "Next.js standalone server.js was not generated." }
-$staticSource = Join-Path $RepoRoot ".next\static"
-$staticTarget = Join-Path $standalone ".next\static"
-New-Item -ItemType Directory -Force -Path (Split-Path $staticTarget -Parent) | Out-Null
-if (Test-Path $staticSource) { Copy-Item $staticSource $staticTarget -Recurse -Force }
-$publicSource = Join-Path $RepoRoot "public"
-if (Test-Path $publicSource) { Copy-Item $publicSource (Join-Path $standalone "public") -Recurse -Force }
+$ElectronDist = Join-Path $RepoRoot "node_modules\electron\dist"
+if (-not (Test-Path (Join-Path $ElectronDist "electron.exe"))) { throw "Electron Windows runtime was not installed." }
+Copy-Item (Join-Path $ElectronDist "*") $AppDir -Recurse -Force
+$ResourcesDir = Join-Path $AppDir "resources\app"
+New-Item -ItemType Directory -Force -Path $ResourcesDir | Out-Null
+Copy-Item (Join-Path $DesktopDir "main.js") $ResourcesDir -Force
+Copy-Item (Join-Path $DesktopDir "package.json") $ResourcesDir -Force
+
+$BrandLogo = Join-Path $RepoRoot "public\branding\Metalik Ferah Auto Kalkan Logosu.png"
+if (Test-Path $BrandLogo) {
+  Copy-Item $BrandLogo (Join-Path $ResourcesDir "ferah-auto-logo.png") -Force
+  Copy-Item $BrandLogo (Join-Path $AppDir "ferah-auto-logo.png") -Force
+}
 
 $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 if (-not $iscc) {
@@ -47,8 +37,9 @@ if (-not $iscc) {
   if (Test-Path $knownIscc) { $isccPath = $knownIscc }
   else { throw "Inno Setup 6 compiler (ISCC.exe) was not found." }
 } else { $isccPath = $iscc.Source }
+
 & $isccPath (Join-Path $WindowsDir "FerahAuto.iss")
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
-$installer = Join-Path $ReleaseDir "FERAH-AUTO-TEK-KURULUM.exe"
+$installer = Join-Path $ReleaseDir "FERAH-AUTO-WINDOWS-KURULUM.exe"
 if (-not (Test-Path $installer)) { throw "Installer output is missing." }
-Write-Host "FERAH AUTO desktop application installer created: $installer"
+Write-Host "Created: $installer"
