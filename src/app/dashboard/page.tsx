@@ -449,7 +449,7 @@ export default function DashboardPage() {
     const partsSupplier=String(f.get("parts_supplier")||"");
     const partsExpectedRaw=String(f.get("parts_expected_at")||"");
     if(nextStatus==="waiting_parts" && (!partsSupplier || !partsExpectedRaw)) { setNotice("Parça bekleniyor aşamasında temin sorumlusu ve tahmini geliş zamanı zorunludur."); return; }
-    const patch:Record<string,unknown>={diagnosis,required_parts,mechanic_notes:String(f.get("mechanic_notes")||"").trim(),parts_supplier:partsSupplier||null,parts_expected_at:partsExpectedRaw?new Date(partsExpectedRaw).toISOString():null};
+    const patch:Record<string,unknown>={diagnosis,required_parts:requiredParts,mechanic_notes:String(f.get("mechanic_notes")||"").trim(),parts_supplier:partsSupplier||null,parts_expected_at:partsExpectedRaw?new Date(partsExpectedRaw).toISOString():null};
     if(requestedStage) patch.status=nextStatus;
     if(requestedStage==="ready" && deliveryAssignee) patch.assigned_mechanic_id=deliveryAssignee.id;
     if(nextStatus==="repairing"&&!job.started_at) patch.started_at=new Date().toISOString();
