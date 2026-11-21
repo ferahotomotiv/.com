@@ -21,7 +21,8 @@ export async function POST(request: NextRequest) {
 
     const paths = [...new Set([vehicle.photo_path, ...(Array.isArray(vehicle.photo_paths) ? vehicle.photo_paths : [])]
       .filter((path): path is string => typeof path === "string" && path.length > 0))];
-    if (!paths.length) return NextResponse.json({ photos: [] });
+    const modelPath = typeof vehicle.showroom_model_path === "string" ? vehicle.showroom_model_path : null;
+    if (!paths.length && !modelPath) return NextResponse.json({ photos: [], showroomModel: null, showroomStatus: vehicle.showroom_status || "photo_only" });
 
     // Service key stays server-side; customers receive short-lived signed URLs only.
     const admin = createClient(url, secret, { auth: { autoRefreshToken: false, persistSession: false } });
@@ -29,7 +30,8 @@ export async function POST(request: NextRequest) {
       const { data } = await admin.storage.from("vehicle-media").createSignedUrl(path, 1800);
       return data?.signedUrl ? { url: data.signedUrl } : null;
     }));
-    return NextResponse.json({ photos: photos.filter(Boolean) }, {
+    const { data: modelData } = modelPath ? await admin.storage.from("vehicle-media").createSignedUrl(modelPath, 1800) : { data: null };
+    return NextResponse.json({ photos: photos.filter(Boolean), showroomModel: modelData?.signedUrl || null, showroomStatus: vehicle.showroom_status || "photo_only" }, {
       headers: { "Cache-Control": "private, no-store, max-age=0" }
     });
   } catch {
