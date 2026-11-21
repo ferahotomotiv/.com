@@ -3,8 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 
 export async function POST(request: NextRequest) {
   try {
-    const { plate, accessCode } = await request.json();
-    if (typeof plate !== "string" || typeof accessCode !== "string" || !plate.trim() || accessCode.length < 8) {
+    const { plate } = await request.json();
+    if (typeof plate !== "string" || !plate.trim()) {
       return NextResponse.json({ error: "Geçersiz sorgulama bilgisi." }, { status: 400 });
     }
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     // Verify the customer's plate + access code with the existing restricted lookup RPC.
     const publicClient = createClient(url, anon, { auth: { autoRefreshToken: false, persistSession: false } });
     const { data: vehicle, error } = await publicClient.rpc("customer_vehicle_lookup", {
-      p_plate: plate.trim(), p_access_code: accessCode
+      p_plate: plate.trim()
     });
     if (error || !vehicle) return NextResponse.json({ error: "Araç doğrulanamadı." }, { status: 404 });
 
