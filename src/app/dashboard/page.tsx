@@ -16,7 +16,8 @@ type Vehicle = { id:string; plate:string; owner_name:string; contact_phone:strin
 type Job = { id:string; vehicle_id:string; title:string; diagnosis:string|null; required_parts:string|null; mechanic_notes:string|null; parts_supplier:string|null; parts_expected_at:string|null; status:VehicleStatus; assigned_mechanic_id:string|null; started_at:string|null; completed_at:string|null; created_at:string };
 type Profile = { id:string; full_name:string; username:string|null; contact_phone:string|null; job_title:string|null; role:Role; is_active:boolean; last_seen_at:string|null };
 type Entry = { id:string; entry_type:"income"|"expense"; category:string; description:string; amount:number; entry_date:string; vehicle_id:string|null; recorded_by:string|null; payment_method:string };
-type Message = { id:string; sender_id:string; recipient_id:string|null; recipient_role:string|null; body:string; read_at:string|null; created_at:string; message_type:"team"|"direct"|"announcement"; attachment_path:string|null; is_pinned:boolean; edited_at:string|null };\ntype MessageRead = { message_id:string; user_id:string; read_at:string };
+type Message = { id:string; sender_id:string; recipient_id:string|null; recipient_role:string|null; body:string; read_at:string|null; created_at:string; message_type:"team"|"direct"|"announcement"; attachment_path:string|null; is_pinned:boolean; edited_at:string|null };
+type MessageRead = { message_id:string; user_id:string; read_at:string };
 type VehicleEvent = { id:string; vehicle_id:string; actor_id:string|null; title:string; details:string|null; status:VehicleStatus|null; event_type:string; customer_visible:boolean; created_at:string };
 
 const statusLabels: Record<VehicleStatus,string> = {
