@@ -60,3 +60,30 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: message }, { status });
   }
 }
+
+export async function PUT(request: NextRequest) {
+  try {
+    const admin = await authorize(request);
+    const body = await request.json();
+    const id = String(body.id || "");
+    const entry_type = String(body.entry_type || "");
+    const category = String(body.category || "");
+    const description = String(body.description || "").trim();
+    const amount = Number(body.amount);
+    const entry_date = String(body.entry_date || "");
+    const vehicle_id = body.vehicle_id ? String(body.vehicle_id) : null;
+    const payment_method = String(body.payment_method || "unspecified");
+    const allowedCategories = ["materials","parts","labor","utilities","cleaning","food","salary","other","equipment","rent","taxes","marketing","transport"];
+    const allowedPayments = ["cash","card","transfer","other","unspecified"];
+    if (!id || !["income","expense"].includes(entry_type) || !allowedCategories.includes(category) || !description || !Number.isFinite(amount) || amount <= 0 || !/^\\d{4}-\\d{2}-\\d{2}$/.test(entry_date) || !allowedPayments.includes(payment_method)) {
+      return NextResponse.json({ error: "Finans kaydı alanları geçersiz." }, { status: 400 });
+    }
+    const { data, error } = await admin.from("financial_entries").update({ entry_type, category, description, amount, entry_date, vehicle_id, payment_method }).eq("id", id).select("id,description").single();
+    if (error) return NextResponse.json({ error: "Finans kaydı güncellenemedi: " + error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, entry: data });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Beklenmeyen sunucu hatası.";
+    const status = message.includes("yalnızca aktif") ? 403 : message.includes("Oturum") ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
