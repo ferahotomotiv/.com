@@ -105,7 +105,7 @@ export async function PATCH(request: NextRequest) {
     const id = String(body.id || "");
     const full_name = String(body.full_name || "").trim();
     const phone = String(body.phone || "").trim();
-    const normalized_phone = phone.replace(/\\D/g, "");
+    const normalized_phone = phone.replace(/\D/g, "");
     const email = String(body.email || "").trim() || null;
     const notes = String(body.notes || "").trim() || null;
     if (!id || full_name.length < 2 || phone.length < 7 || normalized_phone.length < 7) {
