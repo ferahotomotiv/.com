@@ -1,13 +1,12 @@
-# FERAH AUTO Android Client
+# FERAH AUTO Android
 
-Target compatibility: Android 8.0 (API 26) and newer.
+Bu Android uygulaması, FERAH AUTO'nun mevcut mobil uyumlu web panelini uygulama penceresinde açar.
 
-The APK will be packaged with Capacitor after the web client is adapted to the local-first repository layer. It will support:
-- LAN server address discovery/manual entry (for example http://192.168.1.20:8787 on the trusted workshop LAN).
-- Secure local session storage.
-- Offline action queue and retry when the LAN server becomes reachable.
-- Camera/gallery access for vehicle intake and service photos.
-- Push notifications when cloud connectivity is available; local in-app notifications remain available on LAN.
-- Role-based screens matching the existing FERAH AUTO staff roles.
+- Başlangıç adresi: https://ferah-auto-service-management.vercel.app/
+- Kimlik doğrulama ve veriler mevcut Supabase altyapısında kalır.
+- İnternet bağlantısı gereklidir.
+- Yerel sunucu, LAN sunucusu, yerel veritabanı veya çevrimdışı eşitleme içermez.
+- Android hedefi: API 26 (Android 8.0) ve üzeri.
+- APK, GitHub Actions Android derlemesi tamamlandığında workflow artifact olarak yayımlanır.
 
-The APK is not yet a release binary. It must not be generated from the current cloud-only frontend and labelled offline-capable: the client-side data layer and API integration are prerequisites.
+Web panelinin mobil görünümü Android WebView içinde açılır. Web uygulamasının responsive tasarımı, giriş akışı ve mobil cihaz izinleri ayrıca gerçek cihazda doğrulanmalıdır.
