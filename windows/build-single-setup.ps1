@@ -20,6 +20,9 @@ try {
 $ElectronDist = Join-Path $RepoRoot "node_modules\electron\dist"
 if (-not (Test-Path (Join-Path $ElectronDist "electron.exe"))) { throw "Electron Windows runtime was not installed." }
 Copy-Item (Join-Path $ElectronDist "*") $AppDir -Recurse -Force
+$ElectronExe = Join-Path $AppDir "electron.exe"
+if (-not (Test-Path $ElectronExe)) { throw "Electron executable is missing." }
+Rename-Item -Path $ElectronExe -NewName "FERAH AUTO.exe"
 $ResourcesDir = Join-Path $AppDir "resources\app"
 New-Item -ItemType Directory -Force -Path $ResourcesDir | Out-Null
 Copy-Item (Join-Path $DesktopDir "main.js") $ResourcesDir -Force
