@@ -5,9 +5,7 @@ const config: CapacitorConfig = {
   appName: "FERAH AUTO",
   webDir: "www",
   server: {
-    url: "https://ferah-auto-service-management.vercel.app/",
-    cleartext: false,
-    androidScheme: "https"
+    allowNavigation: ["ferah-auto-service-management.vercel.app"]
   },
   android: {
     allowMixedContent: false
