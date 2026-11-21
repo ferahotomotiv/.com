@@ -275,12 +275,35 @@ export default function DashboardPage() {
     if(!supabase || !user || !isManager) return;
     setSaving(true);
     const f = new FormData(event.currentTarget);
-    const {error:taskError} = await supabase.from("service_jobs").insert({
-      vehicle_id:String(f.get("vehicle_id")), assigned_mechanic_id:String(f.get("mechanic_id")),
-      title:String(f.get("title")), created_by:user.id, status:"inspecting"
-    });
-    if(taskError) setNotice(taskError.message);
-    else { setNotice("İş emri ustaya atandı."); setShowTaskForm(false); await loadData(); }
+    const vehicleId = String(f.get("vehicle_id"));
+    const assignedMechanicId = String(f.get("mechanic_id"));
+    const title = String(f.get("title"));
+    // Vehicle intake already creates a placeholder job. Reuse it instead of showing
+    // a second, conflicting "Araç kabul / ilk inceleme" card for the same vehicle.
+    const {data:placeholder,error:placeholderError} = await supabase
+      .from("service_jobs").select("id")
+      .eq("vehicle_id",vehicleId).eq("title","Araç kabul / ilk inceleme")
+      .order("created_at",{ascending:false}).limit(1).maybeSingle();
+    if(placeholderError) {
+      setNotice("Mevcut araç iş emri kontrol edilemedi: "+placeholderError.message);
+      setSaving(false);
+      return;
+    }
+    const result = placeholder
+      ? await supabase.from("service_jobs").update({
+          assigned_mechanic_id:assignedMechanicId,title,status:"inspecting",created_by:user.id
+        }).eq("id",placeholder.id)
+      : await supabase.from("service_jobs").insert({
+          vehicle_id:vehicleId,assigned_mechanic_id:assignedMechanicId,
+          title,created_by:user.id,status:"inspecting"
+        });
+    if(result.error) setNotice(result.error.message);
+    else {
+      await supabase.from("vehicles").update({status:"inspecting"}).eq("id",vehicleId);
+      setNotice(placeholder?"İlk inceleme iş emri güncellendi ve personele atandı.":"Yeni iş emri personele atandı.");
+      setShowTaskForm(false);
+      await loadData();
+    }
     setSaving(false);
   }
 
@@ -301,6 +324,8 @@ export default function DashboardPage() {
     if(nextStatus==="ready" || nextStatus==="testing") patch.completed_at = null;
     const {error:updateError} = await supabase.from("service_jobs").update(patch).eq("id",job.id);
     if(updateError) { setNotice(updateError.message); return; }
+    const {error:vehicleStatusError} = await supabase.from("vehicles").update({status:nextStatus}).eq("id",job.vehicle_id);
+    if(vehicleStatusError) { setNotice("İş emri güncellendi ancak araç durumu güncellenemedi: "+vehicleStatusError.message); await loadData(); return; }
     await supabase.from("vehicle_events").insert({
       vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"job_update",
       title:statusLabels[nextStatus],details:diagnosis || mechanicNotes || "Servis kaydı güncellendi.",
