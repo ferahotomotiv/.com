@@ -1,7 +1,5 @@
 "use client";
 
-@keyframes ferahLogoShine { 0%, 62% { transform: translateX(-115%) rotate(-28deg); opacity: 0; } 72% { opacity: .75; } 100% { transform: translateX(115%) rotate(-28deg); opacity: 0; } }
-
 import { createElement, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -551,6 +549,7 @@ export default function DashboardPage() {
   if(!profile) return <main className="min-h-screen grid place-items-center bg-[#090a0c] text-sm text-[#a0a7b1]">Kullanıcı profili yüklenemedi. <a className="ml-2 underline" href="/login">Giriş ekranına dön</a></main>;
 
   return <main className="min-h-screen bg-[#090a0c] text-[#f3f4f6]">
+    <style>{`@keyframes ferahLogoShine { 0%, 62% { transform: translateX(-115%) rotate(-28deg); opacity: 0; } 72% { opacity: .75; } 100% { transform: translateX(115%) rotate(-28deg); opacity: 0; } }`}</style>
     <div className="flex min-h-screen">
       <aside className="hidden max-h-screen w-[248px] shrink-0 flex-col overflow-y-auto overscroll-contain border-r border-[#242830] bg-[#0c0e11] px-4 py-6 lg:flex">
         <a href="/dashboard" aria-label="FERAH AUTO ana sayfa" className="group mb-10 flex items-center gap-3 px-2">
