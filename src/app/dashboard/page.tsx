@@ -113,12 +113,14 @@ export default function DashboardPage() {
     } else {
       setEntries([]);
     }
-    const {data:messageData} = await supabase.from("staff_messages").select("id,sender_id,recipient_id,body,read_at,created_at").order("created_at",{ascending:false}).limit(60);
+    const {data:messageData} = await supabase.from("staff_messages").select("id,sender_id,recipient_id,recipient_role,body,read_at,created_at,message_type,attachment_path,is_pinned,edited_at").order("created_at",{ascending:false}).limit(100);
     setMessages((messageData||[]) as Message[]);
     setLoading(false);
   },[supabase,router]);
 
-  useEffect(()=>{ void loadData(); },[loadData]);\n\n  useEffect(()=>{
+  useEffect(()=>{ void loadData(); },[loadData]);
+
+  useEffect(()=>{
     if(!supabase||!user?.id)return;let alive=true;
     const refresh=async()=>{const {data}=await supabase.from("staff_messages").select("id,sender_id,recipient_id,recipient_role,body,read_at,created_at,message_type,attachment_path,is_pinned,edited_at").order("created_at",{ascending:false}).limit(100);if(!alive||!data)return;setMessages(data as Message[]);const ids=data.map((m:any)=>m.id);if(ids.length){const {data:reads}=await supabase.from("staff_message_reads").select("message_id,user_id,read_at").in("message_id",ids);if(alive)setMessageReads((reads||[]) as MessageRead[]);const unread=data.filter((m:any)=>m.sender_id!==user.id&&!m.read_at);if(unread.length)await supabase.from("staff_message_reads").upsert(unread.map((m:any)=>({message_id:m.id,user_id:user.id})),{onConflict:"message_id,user_id",ignoreDuplicates:true});}const paths=data.filter((m:any)=>m.attachment_path).map((m:any)=>m.attachment_path);const signed=await Promise.all(paths.map(async(path:string)=>{const {data}=await supabase.storage.from("staff-attachments").createSignedUrl(path,3600);return data?.signedUrl?[path,data.signedUrl] as const:null;}));if(alive)setAttachmentUrls(Object.fromEntries(signed.filter(Boolean) as [string,string][]));};
     void refresh();const channel=supabase.channel("staff-messages-live-"+user.id).on("postgres_changes",{event:"*",schema:"public",table:"staff_messages"},()=>void refresh()).on("postgres_changes",{event:"*",schema:"public",table:"staff_message_reads"},()=>void refresh()).subscribe();return()=>{alive=false;void supabase.removeChannel(channel);};
