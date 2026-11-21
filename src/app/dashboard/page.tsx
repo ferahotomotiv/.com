@@ -116,11 +116,21 @@ export default function DashboardPage() {
       supabase.from("customer_vehicle_access_codes").select("vehicle_id,access_code,updated_at"),
       supabase.from("inventory_products").select("id,name,sku,unit,quantity,unit_cost,min_quantity,is_active,created_at").eq("is_active",true).order("name")
     ]);
-    if (vehicleRes.error) setError(vehicleRes.error.message);
+    const loadIssues = [
+      vehicleRes.error && "Araçlar: "+vehicleRes.error.message,
+      jobRes.error && "İş emirleri: "+jobRes.error.message,
+      eventRes.error && "Servis geçmişi: "+eventRes.error.message,
+      staffRes.error && "Personel: "+staffRes.error.message,
+      photoRes.error && "Araç fotoğraf arşivi: "+photoRes.error.message,
+      (["admin","manager","supervisor"].includes(profileData.role) && customerRes.error) && "Müşteriler: "+customerRes.error.message,
+      (["admin","manager","supervisor"].includes(profileData.role) && accessCodeRes.error) && "Müşteri sorgu kodları: "+accessCodeRes.error.message,
+      (["admin","manager","supervisor"].includes(profileData.role) && inventoryRes.error) && "Stok: "+inventoryRes.error.message
+    ].filter(Boolean) as string[];
+    setError(loadIssues.length ? "Bazı kayıtlar yüklenemedi: "+loadIssues.join(" · ") : "");
+    if(loadIssues.length) setNotice("Veri yükleme uyarısı: "+loadIssues.join(" · "));
     setVehicles((vehicleRes.data||[]) as Vehicle[]);
     setCustomers((customerRes.data||[]) as Customer[]);
     setCustomerAccessCodes((accessCodeRes.data||[]) as CustomerAccessCode[]);
-    if(customerRes.error) setNotice("Müşteri kayıtları yüklenemedi: "+customerRes.error.message);
     const photos=(photoRes.data||[]) as VehiclePhoto[];
     setVehiclePhotos(photos);
     const allPaths=[...new Set([...photos.map(p=>p.storage_path),...(vehicleRes.data||[]).flatMap((v:any)=>[v.photo_path,v.showroom_model_path]).filter(Boolean)])];
