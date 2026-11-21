@@ -72,6 +72,10 @@ export default function DashboardPage() {
 
   const isManager = profile?.role === "admin" || profile?.role === "manager" || profile?.role === "supervisor";
   const isAdmin = profile?.role === "admin" || profile?.role === "manager";
+  const isStaffOnline=(person:Profile)=>Boolean(person.is_active&&person.last_seen_at&&Date.now()-new Date(person.last_seen_at).getTime()<=120_000);
+  const onlineStaff=staff.filter(isStaffOnline);
+  const offlineStaff=staff.filter(p=>p.is_active&&!isStaffOnline(p));
+  const inactiveStaff=staff.filter(p=>!p.is_active);
 
   const loadData = useCallback(async () => {
     if (!supabase) { setError("Supabase bağlantı bilgileri eksik. Vercel ortam değişkenlerini kontrol edin."); setLoading(false); return; }
@@ -107,6 +111,19 @@ export default function DashboardPage() {
   },[supabase,router]);
 
   useEffect(()=>{ void loadData(); },[loadData]);
+
+  useEffect(()=>{
+    if(!supabase || !user?.id) return;
+    const heartbeat=async()=>{ await supabase.rpc("set_my_presence"); };
+    const refreshPresence=async()=>{
+      const {data,error}=await supabase.from("profiles").select("id,full_name,username,contact_phone,job_title,role,is_active,last_seen_at").order("full_name");
+      if(!error&&data) setStaff(data as Profile[]);
+    };
+    void heartbeat();
+    const beatTimer=window.setInterval(()=>void heartbeat(),45_000);
+    const refreshTimer=window.setInterval(()=>void refreshPresence(),20_000);
+    return ()=>{window.clearInterval(beatTimer);window.clearInterval(refreshTimer);};
+  },[supabase,user?.id]);
 
   async function signOut() {
     await supabase?.auth.signOut();
@@ -469,6 +486,13 @@ export default function DashboardPage() {
           {tabItems.map(item=><button key={item.id} onClick={()=>setActiveTab(item.id)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[13px] transition ${activeTab===item.id?"bg-white text-black font-semibold":"text-[#929aa6] hover:bg-white/5 hover:text-white"}`}><item.icon size={17}/>{item.label}{item.id==="messages"&&messages.some(m=>m.recipient_id===user?.id&&!m.read_at)?<span className="ml-auto h-2 w-2 rounded-full bg-white"/>:null}</button>)}
         </nav>
         <div className="mt-auto">
+          <button onClick={()=>setActiveTab("staff")} className="mb-3 w-full rounded-xl border border-white/8 bg-white/[.025] p-3 text-left transition hover:border-white/20 hover:bg-white/[.045]">
+            <div className="mb-3 flex items-center justify-between"><span className="text-[10px] font-semibold tracking-[.16em] text-[#8e98a5]">EKİP DURUMU</span><span className="text-[9px] text-[#65707c]">Canlı</span></div>
+            <div className="flex items-center gap-3 text-[11px]"><span className="flex items-center gap-1.5 text-emerald-300"><i className="h-2 w-2 rounded-full bg-emerald-400"/>{onlineStaff.length} çevrim içi</span><span className="flex items-center gap-1.5 text-[#929aa6]"><i className="h-2 w-2 rounded-full bg-[#69727e]"/>{offlineStaff.length} çevrim dışı</span></div>
+            {onlineStaff.slice(0,3).map(p=><div key={p.id} className="mt-2 flex items-center justify-between gap-2 text-[10px]"><span className="truncate text-[#b9c1cb]">{p.full_name||p.username||"Personel"}</span><span className="shrink-0 text-emerald-300">● Aktif</span></div>)}
+            {onlineStaff.length===0&&<p className="mt-2 text-[10px] text-[#737d89]">Şu anda çevrim içi personel yok.</p>}
+            {inactiveStaff.length>0&&<div className="mt-2 border-t border-white/5 pt-2 text-[9px] text-[#6e7783]">{inactiveStaff.length} pasif hesap</div>}
+          </button>
           <div className="mb-4 rounded-xl border border-white/8 bg-white/[.025] p-3"><div className="flex items-center gap-2 text-xs font-medium"><Shield size={14}/>{profile.role==="admin"?"Merkez Yönetici":profile.role==="manager"?"Yönetici":profile.role==="supervisor"?"Supervisor":"Usta"}</div><p className="mt-2 truncate text-[11px] text-[#7f8792]">{user?.email}</p></div>
           <button onClick={signOut} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-xs text-[#89919d] hover:bg-white/5 hover:text-white"><LogOut size={16}/> Güvenli çıkış</button>
         </div>
@@ -513,12 +537,13 @@ export default function DashboardPage() {
 
           {activeTab==="staff"&&<div>
             <PageHeading eyebrow="EKİP YÖNETİMİ / 04" title="Personel ekibi" subtitle="Personel hesaplarını, iletişim bilgilerini ve görevlerini merkez yönetici olarak yönetin." action={isAdmin?<button onClick={()=>setShowStaffForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Personel ekle</button>:null}/>
+            <div className="mb-4 grid gap-3 sm:grid-cols-3"><div className="card p-4"><div className="text-[10px] uppercase tracking-widest text-[#7f8995]">Çevrim içi</div><div className="mt-2 text-2xl font-semibold text-emerald-300">{onlineStaff.length}</div></div><div className="card p-4"><div className="text-[10px] uppercase tracking-widest text-[#7f8995]">Çevrim dışı</div><div className="mt-2 text-2xl font-semibold text-[#c1c7d0]">{offlineStaff.length}</div></div><div className="card p-4"><div className="text-[10px] uppercase tracking-widest text-[#7f8995]">Pasif hesap</div><div className="mt-2 text-2xl font-semibold text-red-300">{inactiveStaff.length}</div></div></div>
             <div className="card overflow-hidden">
-              <div className="grid grid-cols-[1.2fr_1fr_auto] gap-3 border-b border-white/8 px-5 py-3 text-[10px] uppercase tracking-widest text-[#777f8b]"><span>Personel / Kullanıcı adı</span><span>Görev / Yetki</span><span>Hesap yönetimi</span></div>
+              <div className="grid grid-cols-[1.2fr_1fr_auto] gap-3 border-b border-white/8 px-5 py-3 text-[10px] uppercase tracking-widest text-[#777f8b]"><span>Personel / Kullanıcı / Durum</span><span>Görev / Yetki</span><span>Hesap yönetimi</span></div>
               {staff.map(p=>{
                 const canEdit = p.id!==profile.id && isAdmin;
                 return <div key={p.id} className="grid grid-cols-[1.2fr_1fr_auto] items-center gap-3 border-b border-white/5 px-5 py-4 last:border-0">
-                  <div className="min-w-0"><div className="truncate text-xs font-medium">{p.full_name||"İsimsiz personel"}</div><div className="mt-1 text-[10px] text-[#68717d]">@{p.username||"henüz kullanıcı adı yok"} {p.id===profile.id?"· Siz":""}</div><div className="mt-1 text-[10px] text-[#7f8792]">{p.contact_phone||"Telefon eklenmemiş"} · {p.role==="admin"?"Merkez Yönetici":p.role==="manager"?"Yönetici (Tam Yetki)":p.job_title|| (p.role==="supervisor"?"Supervisor":"Usta")}</div></div>
+                  <div className="min-w-0"><div className="truncate text-xs font-medium">{p.full_name||"İsimsiz personel"}</div><div className="mt-1 text-[10px] text-[#68717d]">@{p.username||"henüz kullanıcı adı yok"} {p.id===profile.id?"· Siz":""}</div><div className="mt-1 text-[10px] text-[#7f8792]">{p.contact_phone||"Telefon eklenmemiş"} · {p.role==="admin"?"Merkez Yönetici":p.role==="manager"?"Yönetici (Tam Yetki)":p.job_title|| (p.role==="supervisor"?"Supervisor":"Usta")}</div><div className="mt-2 flex flex-wrap items-center gap-2"><span className={"inline-flex items-center gap-1.5 text-[10px] "+(!p.is_active?"text-red-300":isStaffOnline(p)?"text-emerald-300":"text-[#89929e]")}><i className={"h-1.5 w-1.5 rounded-full "+(!p.is_active?"bg-red-400":isStaffOnline(p)?"bg-emerald-400":"bg-[#737d89]")}/>{!p.is_active?"Hesap pasif":isStaffOnline(p)?"Çevrim içi":"Çevrim dışı"}</span>{p.is_active&&!isStaffOnline(p)&&p.last_seen_at&&<span className="text-[9px] text-[#68717d]">Son görülme: {dateTime(p.last_seen_at)}</span>}</div></div>
                   <div>
                     {isAdmin?<select aria-label={p.full_name+" rolü"} disabled={!canEdit||savingStaffId===p.id} value={p.role} onChange={e=>void updateStaff(p,{role:e.target.value as Role})} className="w-full min-w-[112px] rounded-lg border border-white/10 bg-[#111419] px-2 py-2 text-xs text-[#d7dbe1] disabled:opacity-50"><option value="mechanic">Usta</option><option value="supervisor">Supervisor</option><option value="manager">Yönetici (Tam Yetki)</option><option value="admin" disabled>Merkez Yönetici</option></select>:<span className="text-xs text-[#b7bdc6]">{p.role==="admin"?"Merkez Yönetici":p.role==="manager"?"Yönetici":p.role==="supervisor"?"Supervisor":"Usta"}</span>}
                   </div>
