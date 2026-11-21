@@ -519,7 +519,8 @@ export default function DashboardPage() {
     const nextStatus=(requestedStage||job.status) as VehicleStatus;
     const transitions:Record<string,string[]> = {inspecting:["waiting_parts","repairing"],waiting_parts:["repairing"],repairing:["testing"],testing:["ready"],ready:["delivered"]};
     if(requestedStage && !(transitions[job.status]||[]).includes(requestedStage)) { setNotice("Bu aşamaya doğrudan geçilemez. Sıradaki aşamayı seçin."); return; }
-    if(requestedStage && ["waiting_parts","repairing"].includes(requestedStage)) { setNotice("Ürün tedarik ve montaj atama adımlarını Tedarik panelinden tamamlayın; servis aşaması otomatik ilerleyecektir."); return; }
+    const noPartsRepair = requestedStage==="repairing" && job.customer_quote_status==="approved" && job.procurement_status==="not_started" && !requiredParts.trim();
+    if(requestedStage==="waiting_parts" || (requestedStage==="repairing" && !noPartsRepair)) { setNotice("Parça gerekiyorsa önce stoktan ayırma veya tedarik siparişi ve montaj atama adımlarını tamamlayın. Parça gerekmeyen onarımlar müşteri onayından sonra doğrudan başlatılabilir."); return; }
     if(requestedStage==="delivered" && !isManager) { setNotice("Aracı müşteriye yalnızca yönetici veya supervisor teslim edebilir."); return; }
     let deliveryAssignee:Profile|undefined;
     if(requestedStage==="ready") {
