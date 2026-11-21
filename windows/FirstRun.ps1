@@ -3,6 +3,10 @@ $Root = Join-Path $env:ProgramData "FerahAuto\Server"
 $Data = Join-Path $Root "data"
 New-Item -ItemType Directory -Force -Path $Data | Out-Null
 $envFile = Join-Path $Root ".env"
+$identityFile = Join-Path $Root "server-identity.json"
+if (-not (Test-Path $identityFile)) {
+  @{ serverId = [guid]::NewGuid().ToString(); serverName = $env:COMPUTERNAME; createdAt = (Get-Date).ToUniversalTime().ToString("o") } | ConvertTo-Json | Set-Content -Encoding UTF8 $identityFile
+}
 if (-not (Test-Path $envFile)) {
   $bytes = New-Object byte[] 48
   $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
@@ -31,4 +35,4 @@ try {
   $health = Invoke-RestMethod -Uri "http://127.0.0.1:8787/health" -TimeoutSec 5
   if (-not $health.ok) { throw "Health check failed." }
 } catch { throw "FERAH AUTO server did not pass its local health check: $($_.Exception.Message)" }
-Write-Output "FERAH AUTO local server installed and started. LAN port: 8787"
+Write-Output "FERAH AUTO server role assigned to $env:COMPUTERNAME. LAN port: 8787"
