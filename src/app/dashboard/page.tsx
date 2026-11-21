@@ -15,7 +15,7 @@ type VehicleStatus = "intake" | "inspecting" | "waiting_parts" | "repairing" | "
 type Customer = { id:string; full_name:string; phone:string; normalized_phone:string; email:string|null; notes:string|null; created_at:string };
 type CustomerAccessCode = { vehicle_id:string; access_code:string; updated_at:string };
 type Vehicle = { id:string; customer_id:string|null; plate:string; owner_name:string; contact_phone:string; make:string; model:string; complaint:string; status:VehicleStatus; estimated_completion:string|null; received_at:string; photo_path:string|null; showroom_model_path:string|null; showroom_status:string; showroom_updated_at:string|null };
-type Job = { id:string; vehicle_id:string; title:string; diagnosis:string|null; required_parts:string|null; mechanic_notes:string|null; parts_supplier:string|null; parts_expected_at:string|null; status:VehicleStatus; assigned_mechanic_id:string|null; started_at:string|null; completed_at:string|null; created_at:string };
+type Job = { id:string; vehicle_id:string; title:string; diagnosis:string|null; required_parts:string|null; mechanic_notes:string|null; parts_supplier:string|null; parts_expected_at:string|null; mechanic_report:string|null; estimated_parts_cost:number|null; estimated_labor_cost:number|null; estimate_notes:string|null; estimate_status:string; manager_parts_cost:number|null; manager_labor_cost:number|null; manager_quote_notes:string|null; customer_quote_total:number|null; customer_quote_status:string; customer_quote_sent_at:string|null; customer_approved_at:string|null; status:VehicleStatus; assigned_mechanic_id:string|null; started_at:string|null; completed_at:string|null; created_at:string };
 type Profile = { id:string; full_name:string; username:string|null; contact_phone:string|null; job_title:string|null; role:Role; is_active:boolean; last_seen_at:string|null };
 type Entry = { id:string; entry_type:"income"|"expense"; category:string; description:string; amount:number; entry_date:string; vehicle_id:string|null; recorded_by:string|null; payment_method:string };
 type Message = { id:string; sender_id:string; recipient_id:string|null; recipient_role:string|null; body:string; read_at:string|null; created_at:string; message_type:"team"|"direct"|"announcement"; attachment_path:string|null; is_pinned:boolean; edited_at:string|null };
@@ -105,7 +105,7 @@ export default function DashboardPage() {
 
     const [vehicleRes,jobRes,eventRes,staffRes,photoRes,customerRes,accessCodeRes] = await Promise.all([
       supabase.from("vehicles").select("id,customer_id,plate,owner_name,contact_phone,make,model,complaint,status,estimated_completion,received_at,photo_path,showroom_model_path,showroom_status,showroom_updated_at").order("received_at",{ascending:false}).limit(100),
-      supabase.from("service_jobs").select("id,vehicle_id,title,diagnosis,required_parts,mechanic_notes,parts_supplier,parts_expected_at,status,assigned_mechanic_id,started_at,completed_at,created_at").order("created_at",{ascending:false}).limit(200),
+      supabase.from("service_jobs").select("id,vehicle_id,title,diagnosis,required_parts,mechanic_notes,parts_supplier,parts_expected_at,mechanic_report,estimated_parts_cost,estimated_labor_cost,estimate_notes,estimate_status,manager_parts_cost,manager_labor_cost,manager_quote_notes,customer_quote_total,customer_quote_status,customer_quote_sent_at,customer_approved_at,status,assigned_mechanic_id,started_at,completed_at,created_at").order("created_at",{ascending:false}).limit(200),
       supabase.from("vehicle_events").select("id,vehicle_id,actor_id,title,details,status,event_type,customer_visible,created_at").order("created_at",{ascending:false}).limit(500),
       supabase.from("profiles").select("id,full_name,username,contact_phone,job_title,role,is_active,last_seen_at").order("full_name"),
       supabase.from("vehicle_photos").select("id,vehicle_id,storage_path,original_name,caption,uploaded_by,created_at").order("created_at",{ascending:false}).limit(500),
@@ -380,40 +380,80 @@ export default function DashboardPage() {
   }
 
   async function saveJob(job:Job, form:HTMLFormElement) {
-    if(!supabase || !user) return;
+    if(!supabase || !user || !profile) return;
     const linkedVehicle = vehicles.find(v=>v.id===job.vehicle_id);
     if(linkedVehicle && ["delivered","cancelled"].includes(linkedVehicle.status)) { setNotice("Teslim edilmiş veya iptal edilmiş aracın iş emri kapalıdır."); return; }
     const f = new FormData(form);
+    const isMechanic = profile.role === "mechanic";
+    const diagnosis=String(f.get("diagnosis")||"").trim();
+    const requiredParts=String(f.get("required_parts")||"").trim();
+    const mechanicReport=String(f.get("mechanic_report")||"").trim();
+    const estimateNotes=String(f.get("estimate_notes")||"").trim();
+    if(isMechanic) {
+      if(!mechanicReport && !diagnosis && !requiredParts) { setNotice("İnceleme raporunu, arıza tespitini veya gerekli parça bilgisini girin."); return; }
+      const partsRaw=String(f.get("estimated_parts_cost")||"").trim();
+      const laborRaw=String(f.get("estimated_labor_cost")||"").trim();
+      const patch:Record<string,unknown>={
+        diagnosis,required_parts:requiredParts,mechanic_report:mechanicReport,
+        estimated_parts_cost:partsRaw===""?null:Number(partsRaw),
+        estimated_labor_cost:laborRaw===""?null:Number(laborRaw),
+        estimate_notes:estimateNotes,estimate_status:"pending_review"
+      };
+      if((partsRaw!==""&&!Number.isFinite(Number(partsRaw)))||(laborRaw!==""&&!Number.isFinite(Number(laborRaw)))) { setNotice("Tahmini masraf tutarlarını kontrol edin."); return; }
+      const {error:updateError}=await supabase.from("service_jobs").update(patch).eq("id",job.id).eq("assigned_mechanic_id",user.id);
+      if(updateError) { setNotice("İnceleme raporu gönderilemedi: "+updateError.message); return; }
+      const {error:eventError}=await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"diagnosis_report",title:"Usta inceleme raporunu yönetime gönderdi",details:"Teknik inceleme ve tahmini masraf bilgileri yönetici / supervisor değerlendirmesine iletildi.",status:job.status,customer_visible:false});
+      setNotice(eventError?"Rapor kaydedildi ancak işlem geçmişi yazılamadı: "+eventError.message:"İnceleme raporu yönetime iletildi. Yönetici veya supervisor fiyatı netleştirip müşteriye bildirecek.");
+      await loadData();
+      return;
+    }
+    if(!isManager) { setNotice("Bu işlem için yönetici veya supervisor yetkisi gerekiyor."); return; }
+    const quoteAction=String(f.get("quote_action")||"");
+    if(quoteAction) {
+      if(quoteAction==="send_quote") {
+        const parts=Number(f.get("manager_parts_cost")||0);
+        const labor=Number(f.get("manager_labor_cost")||0);
+        if(!Number.isFinite(parts)||!Number.isFinite(labor)||parts<0||labor<0) { setNotice("Müşteriye bildirilecek parça ve işçilik tutarlarını kontrol edin."); return; }
+        const total=parts+labor;
+        if(total<=0) { setNotice("Müşteriye teklif göndermeden önce toplam tutarı girin."); return; }
+        const {error}=await supabase.from("service_jobs").update({manager_parts_cost:parts,manager_labor_cost:labor,manager_quote_notes:String(f.get("manager_quote_notes")||"").trim(),customer_quote_total:total,customer_quote_status:"awaiting_customer",estimate_status:"awaiting_customer",customer_quote_sent_at:new Date().toISOString()}).eq("id",job.id);
+        if(error) { setNotice("Müşteri teklifi kaydedilemedi: "+error.message); return; }
+        const ev=await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"customer_quote",title:"Müşteriye servis fiyat teklifi bildirildi",details:"Servis için fiyat teklifi müşteriye iletildi; onay bekleniyor.",status:job.status,customer_visible:true});
+        setNotice(ev.error?"Teklif kaydedildi ancak servis geçmişi yazılamadı: "+ev.error.message:"Fiyat teklifi kaydedildi. Müşteri onayı gelene kadar onarım aşamasına geçilemez.");
+        await loadData(); return;
+      }
+      if(quoteAction==="approve"||quoteAction==="decline") {
+        if(job.customer_quote_status!=="awaiting_customer") { setNotice("Önce müşteriye fiyat teklifi bildirilmeli."); return; }
+        const approved=quoteAction==="approve";
+        const {error}=await supabase.from("service_jobs").update({customer_quote_status:approved?"approved":"declined",estimate_status:approved?"approved":"declined",customer_approved_at:approved?new Date().toISOString():null}).eq("id",job.id);
+        if(error) { setNotice("Müşteri yanıtı kaydedilemedi: "+error.message); return; }
+        await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"customer_quote_response",title:approved?"Müşteri fiyat teklifini onayladı":"Müşteri fiyat teklifini reddetti",details:approved?"Onaylanan teklif kapsamında servis işlemleri başlatılabilir.":"Müşteri teklifi kabul etmedi; onarım başlatılmayacak.",status:job.status,customer_visible:true});
+        setNotice(approved?"Müşteri onayı kaydedildi. Artık servis aşamasını parça bekleme veya onarım olarak ilerletebilirsiniz.":"Müşteri teklifi reddetti. Onarım başlatılmadı.");
+        await loadData(); return;
+      }
+    }
     const requestedStage = String(f.get("next_status")||"");
     const nextStatus=(requestedStage||job.status) as VehicleStatus;
     const transitions:Record<string,string[]> = {inspecting:["waiting_parts","repairing"],waiting_parts:["repairing"],repairing:["testing"],testing:["ready"],ready:["delivered"]};
     if(requestedStage && !(transitions[job.status]||[]).includes(requestedStage)) { setNotice("Bu aşamaya doğrudan geçilemez. Sıradaki aşamayı seçin."); return; }
+    if(requestedStage && ["waiting_parts","repairing"].includes(requestedStage) && job.customer_quote_status!=="approved") { setNotice("Onarıma veya parça bekleme aşamasına geçmeden önce müşteri fiyat teklifini onaylamalıdır."); return; }
     if(requestedStage==="delivered" && !isManager) { setNotice("Aracı müşteriye yalnızca yönetici veya supervisor teslim edebilir."); return; }
     let deliveryAssignee:Profile|undefined;
     if(requestedStage==="ready") {
       const eligible=(person:Profile)=>person.is_active && ["admin","manager","supervisor"].includes(person.role);
-      const previousManagerEvent=vehicleEvents
-        .filter(e=>e.vehicle_id===job.vehicle_id && e.event_type==="assignment")
-        .sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())
-        .find(e=>{const person=staff.find(s=>s.id===e.actor_id);return !!person && eligible(person);});
+      const previousManagerEvent=vehicleEvents.filter(e=>e.vehicle_id===job.vehicle_id&&e.event_type==="assignment").sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime()).find(e=>{const person=staff.find(s=>s.id===e.actor_id);return !!person&&eligible(person);});
       const currentPerson=staff.find(s=>s.id===user.id);
-      deliveryAssignee=(currentPerson&&eligible(currentPerson)?currentPerson:undefined)
-        || (previousManagerEvent?staff.find(s=>s.id===previousManagerEvent.actor_id):undefined)
-        || staff.find(s=>eligible(s)&&s.role==="supervisor")
-        || staff.find(s=>eligible(s)&&(s.role==="manager"||s.role==="admin"));
+      deliveryAssignee=(currentPerson&&eligible(currentPerson)?currentPerson:undefined)||(previousManagerEvent?staff.find(s=>s.id===previousManagerEvent.actor_id):undefined)||staff.find(s=>eligible(s)&&s.role==="supervisor")||staff.find(s=>eligible(s)&&(s.role==="manager"||s.role==="admin"));
       if(!deliveryAssignee) { setNotice("Araç hazır aşamasına alınamadı: teslimat için aktif bir yönetici veya supervisor bulunamadı."); return; }
     }
-    const diagnosis=String(f.get("diagnosis")||"").trim();
-    const requiredParts=String(f.get("required_parts")||"").trim();
-    const mechanicNotes=String(f.get("mechanic_notes")||"").trim();
     const partsSupplier=String(f.get("parts_supplier")||"");
     const partsExpectedRaw=String(f.get("parts_expected_at")||"");
     if(nextStatus==="waiting_parts" && (!partsSupplier || !partsExpectedRaw)) { setNotice("Parça bekleniyor aşamasında temin sorumlusu ve tahmini geliş zamanı zorunludur."); return; }
-    const patch:Record<string,unknown>={diagnosis,required_parts:requiredParts,mechanic_notes:mechanicNotes,parts_supplier:partsSupplier||null,parts_expected_at:partsExpectedRaw?new Date(partsExpectedRaw).toISOString():null};
+    const patch:Record<string,unknown>={diagnosis,required_parts,mechanic_notes:String(f.get("mechanic_notes")||"").trim(),parts_supplier:partsSupplier||null,parts_expected_at:partsExpectedRaw?new Date(partsExpectedRaw).toISOString():null};
     if(requestedStage) patch.status=nextStatus;
     if(requestedStage==="ready" && deliveryAssignee) patch.assigned_mechanic_id=deliveryAssignee.id;
-    if(nextStatus==="repairing" && !job.started_at) patch.started_at=new Date().toISOString();
-    if(nextStatus==="delivered" && requestedStage) patch.completed_at=new Date().toISOString();
+    if(nextStatus==="repairing"&&!job.started_at) patch.started_at=new Date().toISOString();
+    if(nextStatus==="delivered"&&requestedStage) patch.completed_at=new Date().toISOString();
     const {error:updateError}=await supabase.from("service_jobs").update(patch).eq("id",job.id);
     if(updateError) { setNotice(updateError.message); return; }
     if(requestedStage) {
@@ -423,12 +463,7 @@ export default function DashboardPage() {
       if(vehicleError) { setNotice("İş emri güncellendi ancak araç durumu güncellenemedi: "+vehicleError.message); await loadData(); return; }
       const safeDetails=nextStatus==="waiting_parts"?"Gerekli parçanın temini planlandı.":nextStatus==="ready"?"Servis işlemleri tamamlandı; araç teslim için hazır.":nextStatus==="delivered"?"Araç müşteriye teslim edildi.":"Aracın servis aşaması güncellendi.";
       const {error:eventError}=await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"stage",title:statusLabels[nextStatus],details:safeDetails,status:nextStatus,customer_visible:true});
-      let assignmentError: {message:string}|null=null;
-      if(nextStatus==="ready" && deliveryAssignee) {
-        const result=await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"assignment",title:"Teslimat sorumlusu atandı",details:deliveryAssignee.full_name+" ("+(deliveryAssignee.role==="supervisor"?"Supervisor":"Yönetici")+") araç müşteriye teslim edilmek üzere sorumlu olarak atandı.",status:"ready",customer_visible:false});
-        assignmentError=result.error;
-      }
-      setNotice(eventError?"Aşama ilerletildi ancak işlem geçmişi yazılamadı: "+eventError.message:assignmentError?"Araç hazır olarak kaydedildi ancak teslimat atama geçmişi yazılamadı: "+assignmentError.message:nextStatus==="ready"?"Araç hazır. Teslimat sorumlusu: "+(deliveryAssignee?.full_name||"Yönetici")+". Müşteriye teslim yetkisi yönetici ve supervisorlara aktarıldı.":"Servis aşaması ilerletildi; işlemi yapan personel kaydedildi.");
+      setNotice(eventError?"Aşama ilerletildi ancak işlem geçmişi yazılamadı: "+eventError.message:"Servis aşaması ilerletildi; işlemi yapan personel kaydedildi.");
     } else setNotice("İş emri detayları kaydedildi. Servis aşaması değişmedi.");
     await loadData();
   }
@@ -629,7 +664,7 @@ export default function DashboardPage() {
           {activeTab==="jobs"&&<div>
             <PageHeading eyebrow="ATÖLYE OPERASYONU / 03" title="İş emirleri" subtitle="Her araç için tek aktif sorumlu, kontrollü servis aşamaları ve personel işlem geçmişi." action={isManager?<button onClick={()=>setShowTaskForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Görev ata / Sorumlu değiştir</button>:null}/>
             <div className="mb-5 flex gap-2 overflow-x-auto pb-2">{currentJobs.map(job=>{const v=vehicleMap.get(job.vehicle_id);return <button key={job.vehicle_id} onClick={()=>setSelectedJobVehicleId(job.vehicle_id)} className={`shrink-0 rounded-xl border px-4 py-3 text-left ${selectedJob?.vehicle_id===job.vehicle_id?"border-white bg-white text-black":"border-white/10 bg-white/[.03] text-[#c3c9d2] hover:bg-white/[.07]"}`}><span className="block text-xs font-semibold">{v?.plate||"Plaka yok"}</span><span className="mt-1 block text-[10px] opacity-70">{v?v.make+" "+v.model:"Araç"} · {statusLabels[job.status]}</span></button>})}</div>
-            {selectedJob&&<JobCard key={selectedJob.id} job={selectedJob} vehicle={selectedJobVehicle} staff={staff} isManager={!!isManager} isClosed={["delivered","cancelled"].includes(selectedJobVehicle?.status||"")} history={selectedJobHistory} events={selectedVehicleEvents} onSave={saveJob}/>}
+            {selectedJob&&<JobCard key={selectedJob.id} job={selectedJob} vehicle={selectedJobVehicle} staff={staff} isManager={!!isManager} isMechanic={profile?.role==="mechanic"} isClosed={["delivered","cancelled"].includes(selectedJobVehicle?.status||"")} history={selectedJobHistory} events={selectedVehicleEvents} onSave={saveJob}/>}
             {currentJobs.length===0&&<EmptyState title="Aktif iş emri bulunmuyor" text="Atölyede henüz size atanmış veya oluşturulmuş bir görev yok."/>}
           </div>}
 
@@ -704,7 +739,7 @@ function VehicleRow({vehicle,onClick}:{vehicle:Vehicle;onClick:()=>void}) { retu
 function EmptyState({title,text}:{title:string;text:string}) { return <div className="px-6 py-12 text-center"><div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/[.025] text-[#87909c]"><CarFront size={19}/></div><div className="text-sm font-medium">{title}</div><p className="mt-2 text-xs text-[#7f8792]">{text}</p></div>; }
 function Field({label,children}:{label:string;children:React.ReactNode}) { return <label className="block"><span className="mb-2 block text-[11px] font-medium text-[#aeb5bf]">{label}</span>{children}</label>; }
 function Modal({title,children,onClose}:{title:string;children:React.ReactNode;onClose:()=>void}) { return <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className="card my-5 w-full max-w-xl p-5 shadow-soft sm:p-7"><div className="mb-6 flex items-center justify-between"><h2 className="text-base font-semibold">{title}</h2><button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg border border-white/10 text-[#929aa5] hover:bg-white/5"><X size={16}/></button></div>{children}</div></div>; }
-function JobCard({job,vehicle,staff,isManager,isClosed,history,events,onSave}:{job:Job;vehicle?:Vehicle;staff:Profile[];isManager:boolean;isClosed:boolean;history:Job[];events:VehicleEvent[];onSave:(job:Job,form:HTMLFormElement)=>Promise<void>}) {
+function JobCard({job,vehicle,staff,isManager,isMechanic,isClosed,history,events,onSave}:{job:Job;vehicle?:Vehicle;staff:Profile[];isManager:boolean;isMechanic:boolean;isClosed:boolean;history:Job[];events:VehicleEvent[];onSave:(job:Job,form:HTMLFormElement)=>Promise<void>}) {
   const transitions:Record<string,{value:VehicleStatus;label:string}[]> = {
     inspecting:[{value:"waiting_parts",label:"Parça beklemeye al"},{value:"repairing",label:"Onarıma başla"}],
     waiting_parts:[{value:"repairing",label:"Parça geldi · onarıma başla"}],
@@ -716,26 +751,32 @@ function JobCard({job,vehicle,staff,isManager,isClosed,history,events,onSave}:{j
   const assignee=staff.find(s=>s.id===job.assigned_mechanic_id);
   const sortedEvents=[...events].sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime());
   const latestAssignmentId=sortedEvents.find(e=>e.event_type==="assignment")?.id;
+  const quoteStatus=job.customer_quote_status||"not_prepared";
   return <div className="card overflow-hidden">
     <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 p-5 sm:p-6">
       <div><div className="eyebrow">AKTİF İŞ EMRİ · {job.id.slice(0,8).toUpperCase()}</div><h3 className="mt-2 text-lg font-semibold">{vehicle?.make} {vehicle?.model}</h3><div className="mt-1 text-xs tracking-widest text-[#aeb5bf]">{vehicle?.plate||job.vehicle_id.slice(0,8)}</div><p className="mt-2 text-xs text-[#858d99]">{job.title}</p></div><StatusPill status={job.status}/>
     </div>
     <div className="grid gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,.85fr)]">
       <form onSubmit={e=>{e.preventDefault();if(!isClosed)void onSave(job,e.currentTarget)}} className="space-y-4">
-        <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/[.07] p-4"><div className="eyebrow text-emerald-300">● GÜNCEL SORUMLU PERSONEL</div><div className="mt-1 flex items-center gap-2 text-sm font-semibold text-emerald-300"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,.95)]"/>{assignee?.full_name||"Sorumlu atanmamış"}</div><div className="mt-1 text-[10px] text-emerald-200/70">{assignee?.role==="supervisor"?"Supervisor":assignee?.role==="manager"?"Yönetici":assignee?.job_title||"Usta"}</div></div>
-        {isClosed&&<div className="rounded-lg border border-white/10 bg-white/[.03] px-3 py-2.5 text-xs text-[#aeb5bf]">{vehicle?.status==="delivered"?"Araç müşteriye teslim edildi. İş emri salt okunur.":"Araç kaydı iptal edildi. İş emri salt okunur."}</div>}
-        <div className="rounded-xl border border-white/10 bg-black/10 p-4"><div className="eyebrow">SERVİS AŞAMASI</div><div className="mt-1 text-sm font-semibold">{statusLabels[job.status]}</div><label className="mt-4 block"><span className="mb-2 block text-[11px] text-[#aeb5bf]">Sonraki işlem</span><select name="next_status" disabled={isClosed||nextOptions.length===0} defaultValue="" className="w-full px-3 py-3 text-xs disabled:opacity-50"><option value="">Aşamayı değiştirmeden bilgileri kaydet</option>{nextOptions.map(o=><option value={o.value} key={o.value}>{o.label}</option>)}</select></label><p className="mt-2 text-[10px] leading-4 text-[#747d89]">Aşamalar yalnızca sıradaki adıma ilerler. Geriye dönük veya aşama atlayarak durum değiştirilemez. Her geçişte personel ve tarih kaydedilir.</p></div>
-        <Field label="Arıza tespiti"><textarea name="diagnosis" disabled={isClosed} rows={3} defaultValue={job.diagnosis||""} placeholder="Tespit edilen arızayı yazın…" className="w-full px-3 py-3 text-xs disabled:opacity-50"/></Field>
-        <Field label="Gerekli parça / işlem"><textarea name="required_parts" disabled={isClosed} rows={2} defaultValue={job.required_parts||""} placeholder="Değişmesi gereken parçalar veya işlemler…" className="w-full px-3 py-3 text-xs disabled:opacity-50"/></Field>
-        {(job.status==="waiting_parts"||job.status==="inspecting")&&<div className="rounded-xl border border-amber-500/20 bg-amber-500/[.04] p-4 space-y-3"><div className="eyebrow text-amber-200">PARÇA TEDARİK TAKİBİ · GEREKİRSE DOLDURUN</div><Field label="Parçayı kim temin edecek?"><select name="parts_supplier" required defaultValue={job.parts_supplier||""} className="w-full px-3 py-3 text-xs"><option value="">Temin sorumlusu seçin</option><option value="customer">Müşteri temin edecek</option><option value="business">FERAH AUTO temin edecek</option></select></Field><Field label="Tahmini parça geliş tarihi ve saati"><input name="parts_expected_at" required type="datetime-local" defaultValue={job.parts_expected_at?new Date(job.parts_expected_at).toISOString().slice(0,16):""} className="w-full px-3 py-3 text-xs"/></Field></div>}
-        <Field label="İç personel işlem notu (müşteriye gösterilmez)"><textarea name="mechanic_notes" disabled={isClosed} rows={3} defaultValue={job.mechanic_notes||""} placeholder="Yapılan işlemi ve teknik notları yazın…" className="w-full px-3 py-3 text-xs disabled:opacity-50"/></Field>
-        {!isClosed&&<button className="w-full rounded-xl bg-white px-4 py-3 text-xs font-semibold text-black hover:bg-[#e1e4e8]">Bilgileri kaydet / seçilen aşamaya ilerle</button>}
+        <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/[.07] p-4"><div className="eyebrow text-emerald-300">● GÜNCEL SORUMLU PERSONEL</div><div className="mt-1 flex items-center gap-2 text-sm font-semibold text-emerald-300">{assignee?.full_name||"Sorumlu atanmamış"}</div><div className="mt-1 text-[10px] text-emerald-200/70">{assignee?.role==="supervisor"?"Supervisor":assignee?.role==="manager"?"Yönetici":assignee?.job_title||"Usta"}</div></div>
+        {isClosed&&<div className="rounded-lg border border-white/10 bg-white/[.03] px-3 py-2.5 text-xs text-[#aeb5bf]">Araç kaydı kapalıdır. İş emri salt okunur.</div>}
+        <div className="rounded-xl border border-white/10 bg-black/10 p-4"><div className="eyebrow">SERVİS AŞAMASI</div><div className="mt-1 text-sm font-semibold">{statusLabels[job.status]}</div>
+          {!isMechanic&&<label className="mt-4 block"><span className="mb-2 block text-[11px] text-[#aeb5bf]">Sonraki işlem</span><select name="next_status" disabled={isClosed||nextOptions.length===0} defaultValue="" className="w-full px-3 py-3 text-xs disabled:opacity-50"><option value="">Aşamayı değiştirmeden bilgileri kaydet</option>{nextOptions.map(o=><option value={o.value} key={o.value}>{o.label}</option>)}</select></label>}
+          <div className="mt-2 text-[10px] leading-4 text-[#747d89]">{isMechanic?"İlk görev aracı incelemek ve teknik raporu yönetime göndermektir. Servis aşamasını yönetim ilerletir.":"Onarım veya parça tedariki yalnızca müşteri fiyat teklifini onayladıktan sonra başlatılabilir."}</div>
+        </div>
+        {isManager&&<div className="rounded-xl border border-sky-500/20 bg-sky-500/[.04] p-4 space-y-3"><div className="eyebrow text-sky-200">USTA İNCELEME RAPORU</div><div className="text-xs leading-5 text-[#d2d8e0] whitespace-pre-wrap">{job.mechanic_report||job.diagnosis||"Usta inceleme raporunu henüz göndermedi."}</div>{job.required_parts&&<div className="text-xs text-[#aeb5bf]">Gerekli parça / işlem: {job.required_parts}</div>}<div className="grid grid-cols-2 gap-3 text-xs"><div><div className="text-[10px] text-[#7f8995]">Usta tahmini parça</div><div className="mt-1">{job.estimated_parts_cost==null?"Belirtilmedi":money(job.estimated_parts_cost)}</div></div><div><div className="text-[10px] text-[#7f8995]">Usta tahmini işçilik</div><div className="mt-1">{job.estimated_labor_cost==null?"Belirtilmedi":money(job.estimated_labor_cost)}</div></div></div>{job.estimate_notes&&<p className="text-[11px] text-[#aeb5bf]">{job.estimate_notes}</p>}<div className="text-[10px] text-amber-200">Rapor durumu: {job.estimate_status==="pending_review"?"Yönetim incelemesi bekliyor":job.estimate_status==="awaiting_customer"?"Müşteri teklifi bekliyor":job.estimate_status==="approved"?"Müşteri onayladı":job.estimate_status==="declined"?"Müşteri reddetti":"Henüz gönderilmedi"}</div></div>}
+        {isMechanic&&<><Field label="Arıza tespiti"><textarea name="diagnosis" disabled={isClosed} rows={3} defaultValue={job.diagnosis||""} placeholder="Örn. Şanzıman iç rulmanında ses ve boşluk tespit edildi…" className="w-full px-3 py-3 text-xs disabled:opacity-50"/></Field><Field label="Gerekli parça / işlem"><textarea name="required_parts" disabled={isClosed} rows={2} defaultValue={job.required_parts||""} placeholder="Değişmesi gereken parçalar ve yapılması gereken işlemler…" className="w-full px-3 py-3 text-xs disabled:opacity-50"/></Field><Field label="Ustanın teknik inceleme raporu"><textarea name="mechanic_report" disabled={isClosed} rows={4} defaultValue={job.mechanic_report||""} placeholder="Arızanın kaynağı, nasıl tespit edildiği ve teknik açıklama…" className="w-full px-3 py-3 text-xs disabled:opacity-50"/></Field><div className="rounded-xl border border-amber-500/20 bg-amber-500/[.04] p-4 space-y-3"><div className="eyebrow text-amber-200">YÖNETİME İLETİLECEK TAHMİNİ MASRAF</div><div className="grid grid-cols-2 gap-3"><Field label="Tahmini parça tutarı (₺)"><input name="estimated_parts_cost" type="number" min="0" step="0.01" defaultValue={job.estimated_parts_cost??""} className="w-full px-3 py-3 text-xs"/></Field><Field label="Tahmini işçilik (₺)"><input name="estimated_labor_cost" type="number" min="0" step="0.01" defaultValue={job.estimated_labor_cost??""} className="w-full px-3 py-3 text-xs"/></Field></div><Field label="Masraf / parça araştırma notu"><textarea name="estimate_notes" rows={2} defaultValue={job.estimate_notes||""} placeholder="Parça kodu, tedarikçi bilgisi, fiyatın tahmini olup olmadığı…" className="w-full px-3 py-3 text-xs"/></Field></div></>}
+        {isManager&&<><div className="rounded-xl border border-violet-500/20 bg-violet-500/[.04] p-4 space-y-3"><div className="eyebrow text-violet-200">YÖNETİM · MÜŞTERİ FİYAT TEKLİFİ</div><div className="grid grid-cols-2 gap-3"><Field label="Net parça tutarı (₺)"><input name="manager_parts_cost" type="number" min="0" step="0.01" defaultValue={job.manager_parts_cost??job.estimated_parts_cost??""} className="w-full px-3 py-3 text-xs"/></Field><Field label="Net işçilik (₺)"><input name="manager_labor_cost" type="number" min="0" step="0.01" defaultValue={job.manager_labor_cost??job.estimated_labor_cost??""} className="w-full px-3 py-3 text-xs"/></Field></div><Field label="Müşteriye bildirilecek açıklama"><textarea name="manager_quote_notes" rows={2} defaultValue={job.manager_quote_notes||""} placeholder="Arıza, değişecek parça, yapılacak işlem ve fiyat açıklaması…" className="w-full px-3 py-3 text-xs"/></Field><div className="rounded-lg border border-white/10 bg-black/20 p-3 text-xs">Teklif toplamı: <strong>{money(Number(job.manager_parts_cost??job.estimated_parts_cost??0)+Number(job.manager_labor_cost??job.estimated_labor_cost??0))}</strong><div className="mt-1 text-[10px] text-[#89929e]">Mevcut teklif durumu: {quoteStatus==="awaiting_customer"?"Müşteri onayı bekleniyor":quoteStatus==="approved"?"Müşteri onayladı":quoteStatus==="declined"?"Müşteri reddetti":"Henüz teklif hazırlanmadı"}</div></div><div className="grid gap-2"><button type="submit" name="quote_action" value="send_quote" disabled={isClosed||job.estimate_status!=="pending_review"&&quoteStatus!=="awaiting_customer"} className="rounded-xl bg-white px-4 py-3 text-xs font-semibold text-black disabled:opacity-40">Teklifi kaydet · Müşteriye bildirildi</button><div className="grid grid-cols-2 gap-2"><button type="submit" name="quote_action" value="approve" disabled={isClosed||quoteStatus!=="awaiting_customer"} className="rounded-xl border border-emerald-500/30 px-3 py-2.5 text-[11px] text-emerald-200 disabled:opacity-40">Müşteri onayladı</button><button type="submit" name="quote_action" value="decline" disabled={isClosed||quoteStatus!=="awaiting_customer"} className="rounded-xl border border-red-500/30 px-3 py-2.5 text-[11px] text-red-200 disabled:opacity-40">Müşteri reddetti</button></div></div></div></>}
+        {isManager&&<div className="rounded-xl border border-white/10 bg-black/10 p-4"><div className="eyebrow">SERVİS SONRASI İŞLEM NOTU</div><Field label="İç personel işlem notu"><textarea name="mechanic_notes" rows={3} defaultValue={job.mechanic_notes||""} placeholder="Atölye içi notlar…" className="mt-2 w-full px-3 py-3 text-xs"/></Field></div>}
+        {!isMechanic&&<div className="space-y-3"><div className="rounded-xl border border-amber-500/20 bg-amber-500/[.04] p-4 space-y-3"><div className="eyebrow text-amber-200">PARÇA TEDARİK TAKİBİ</div><Field label="Parçayı kim temin edecek?"><select name="parts_supplier" defaultValue={job.parts_supplier||""} className="w-full px-3 py-3 text-xs"><option value="">Temin sorumlusu seçin</option><option value="customer">Müşteri temin edecek</option><option value="business">FERAH AUTO temin edecek</option></select></Field><Field label="Tahmini parça geliş tarihi ve saati"><input name="parts_expected_at" type="datetime-local" defaultValue={job.parts_expected_at?new Date(job.parts_expected_at).toISOString().slice(0,16):""} className="w-full px-3 py-3 text-xs"/></Field></div>{!isManager&&<Field label="İç personel işlem notu"><textarea name="mechanic_notes" rows={3} defaultValue={job.mechanic_notes||""} className="w-full px-3 py-3 text-xs"/></Field>}</div>}
+        {!isClosed&&!isManager&&<button type="submit" className="w-full rounded-xl bg-white px-4 py-3 text-xs font-semibold text-black">İnceleme raporunu yönetime gönder</button>}
+        {!isClosed&&isManager&&<button type="submit" className="w-full rounded-xl bg-white px-4 py-3 text-xs font-semibold text-black">Bilgileri kaydet / seçilen aşamaya ilerle</button>}
       </form>
       <aside className="space-y-5"><section><div className="eyebrow mb-3">ARAÇ SERVİS GEÇMİŞİ</div><div className="space-y-3">
-        {sortedEvents.map(ev=>{const isAssignment=ev.event_type==="assignment";const isCurrentAssignment=isAssignment&&ev.id===latestAssignmentId;return <div key={ev.id} className={`rounded-lg border p-3 ${isCurrentAssignment?"border-emerald-400/50 bg-emerald-500/[.06]":isAssignment?"border-amber-500/30 bg-amber-500/[.04]":"border-white/8 bg-white/[.025]"}`}><div className="flex items-start justify-between gap-3"><div className={`text-xs font-semibold ${isCurrentAssignment?"text-emerald-300":isAssignment?"text-amber-300":"text-[#e5e7eb]"}`}>{isCurrentAssignment&&<span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.9)]"/>}{ev.title}</div><div className="shrink-0 text-[9px] text-[#69727e]">{dateTime(ev.created_at)}</div></div><div className="mt-1 text-[10px] text-[#8f98a4]">İşlemi yapan: {staff.find(s=>s.id===ev.actor_id)?.full_name||"Sistem / önceki kayıt"}</div>{ev.details&&<p className={`mt-1 text-[10px] leading-4 ${isCurrentAssignment?"text-emerald-200/80":isAssignment?"text-amber-200/80":"text-[#7f8995]"}`}>{ev.details}</p>}</div>})}
+        {sortedEvents.map(ev=>{const isAssignment=ev.event_type==="assignment";const isCurrentAssignment=isAssignment&&ev.id===latestAssignmentId;return <div key={ev.id} className={`rounded-lg border p-3 ${isCurrentAssignment?"border-emerald-400/50 bg-emerald-500/[.06]":isAssignment?"border-amber-500/30 bg-amber-500/[.04]":"border-white/8 bg-white/[.025]"}`}><div className={`flex items-start justify-between gap-3`}><div className={`text-xs font-semibold ${isCurrentAssignment?"text-emerald-300":isAssignment?"text-amber-300":"text-[#e5e7eb]"}`}>{ev.title}</div><div className="shrink-0 text-[9px] text-[#69727e]">{dateTime(ev.created_at)}</div></div><div className="mt-1 text-[10px] text-[#8f98a4]">İşlemi yapan: {staff.find(s=>s.id===ev.actor_id)?.full_name||"Sistem / önceki kayıt"}</div>{ev.details&&<p className="mt-1 text-[10px] leading-4 text-[#7f8995]">{ev.details}</p>}</div>})}
         {history.map(old=><div key={old.id} className="rounded-lg border border-white/8 bg-white/[.025] p-3"><div className="text-xs font-medium">Önceki görev: {old.title}</div><div className="mt-1 text-[10px] text-[#8f98a4]">Önceki sorumlu: {staff.find(s=>s.id===old.assigned_mechanic_id)?.full_name||"Kayıtlı personel"} · {dateTime(old.created_at)}</div></div>)}
         {events.length===0&&history.length===0&&<p className="text-xs text-[#7f8995]">Henüz işlem geçmişi yok.</p>}
-      </div></section><div className="rounded-lg border border-white/8 bg-white/[.025] p-3 text-[10px] leading-5 text-[#737d89]">Personel işlem geçmişi atölye içinde tutulur. Müşteri panelinde yalnızca müşteriye açık aşama bilgileri gösterilir.</div></aside>
+      </div></section><div className="rounded-lg border border-white/8 bg-white/[.025] p-3 text-[10px] leading-5 text-[#737d89]">Ustanın raporu ve masraf tahmini yalnızca atölye yönetimine görünür. Müşteriye yalnızca yönetim tarafından bildirilen teklif ve onaylı servis aşamaları açılır.</div></aside>
     </div>
   </div>;
 }
