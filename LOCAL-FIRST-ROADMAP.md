@@ -71,3 +71,10 @@ The current Windows workflow bundles `local-server/` and its Node runtime only. 
 - The current dashboard is a 153 KB client component and directly uses Supabase for data, auth, storage and RPC operations.
 - `src/lib/supabase/client.ts` returns `null` when public Supabase environment variables are absent; the login page currently treats that as a configuration error.
 - The existing Windows build script installs production dependencies only for `local-server`; no Next.js build is part of the installer workflow.
+
+
+### Database behavior and media inventory verified
+- The connected production project currently exposes 14 public tables; all 14 have row-level security enabled.
+- Storage buckets: `vehicle-media` (private) and `staff-attachments` (private; 10 MiB limit; JPEG, PNG, WebP and PDF).
+- Public database functions inspected: `assign_service_job_installation`, `create_initial_vehicle_event`, `create_service_job_procurement_items`, `create_vehicle_intake`, `create_vehicle_stock_expense`, `current_staff_role`, `customer_vehicle_lookup`, `enforce_service_job_stage_order`, `fulfill_service_job_from_stock`, `guard_closed_vehicle_service_job`, `guard_delivered_vehicle_reopen`, `guard_service_job_quote_state`, `guard_vehicle_status_sync`, `handle_new_auth_user`, `is_workshop_admin`, `is_workshop_manager`, `protect_mechanic_job_fields`, `receive_service_job_procurement_item`, `receive_service_job_purchase`, `record_inventory_stock_in`, `reopen_delivered_vehicle_service`, `set_customer_access_code`, `set_my_presence`, `sync_service_job_quote_finance`, `sync_vehicle_status_from_job`, and `touch_updated_at`.
+- RLS policy inventory confirms distinct permissions for managers, mechanics, active staff and message recipients. Local authorization must preserve these role/action distinctions; a single generic "logged in" check is insufficient.
