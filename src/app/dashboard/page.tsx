@@ -42,7 +42,7 @@ const statusClasses: Record<VehicleStatus,string> = {
 };
 const money = (n:number) => new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY",maximumFractionDigits:0}).format(Number(n||0));
 const dateTime = (s:string) => new Date(s).toLocaleString("tr-TR",{dateStyle:"medium",timeStyle:"short"});
-const escapePrintHtml = (value:unknown) => String(value??"").replace(/[&<>"']/g, ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]||ch));
+const escapePrintHtml = (value:unknown) => String(value??"").replace(/[&<>"']/g, ch=>{ const entities:Record<string,string>={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}; return entities[ch]||ch; });
 function printCustomerServiceForm(job:Job,vehicle?:Vehicle) {
   if(!vehicle) return;
   const plate=vehicle.plate;
