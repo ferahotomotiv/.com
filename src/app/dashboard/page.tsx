@@ -1,5 +1,7 @@
 "use client";
 
+@keyframes ferahLogoShine { 0%, 62% { transform: translateX(-115%) rotate(-28deg); opacity: 0; } 72% { opacity: .75; } 100% { transform: translateX(115%) rotate(-28deg); opacity: 0; } }
+
 import { createElement, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -551,9 +553,20 @@ export default function DashboardPage() {
   return <main className="min-h-screen bg-[#090a0c] text-[#f3f4f6]">
     <div className="flex min-h-screen">
       <aside className="hidden max-h-screen w-[248px] shrink-0 flex-col overflow-y-auto overscroll-contain border-r border-[#242830] bg-[#0c0e11] px-4 py-6 lg:flex">
-        <a href="/dashboard" className="mb-10 flex items-center gap-3 px-2">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-black"><CarFront size={22}/></div>
-          <div><div className="text-[14px] font-black tracking-[.2em]">FERAH AUTO</div><div className="eyebrow mt-1">WORKSHOP OS</div></div>
+        <a href="/dashboard" aria-label="FERAH AUTO ana sayfa" className="group mb-10 flex items-center gap-3 px-2">
+          <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[15px] border border-white/15 bg-[linear-gradient(145deg,#30343b_0%,#111419_58%,#050607_100%)] shadow-[0_8px_24px_rgba(0,0,0,.42),inset_0_1px_0_rgba(255,255,255,.16)] transition duration-500 group-hover:-translate-y-0.5 group-hover:border-white/30 group-hover:shadow-[0_10px_30px_rgba(0,0,0,.55),0_0_22px_rgba(210,220,235,.12)]">
+            <span aria-hidden="true" className="pointer-events-none absolute -inset-8 rotate-[-28deg] bg-[linear-gradient(90deg,transparent,rgba(255,255,255,.16),transparent)] opacity-60 motion-safe:animate-[ferahLogoShine_5s_ease-in-out_infinite]"/>
+            <span aria-hidden="true" className="absolute inset-[3px] rounded-[12px] border border-white/[.07]"/>
+            <CarFront size={25} strokeWidth={1.8} className="relative z-10 text-[#f4f5f6] transition-transform duration-500 group-hover:scale-110 group-hover:-translate-y-0.5"/>
+            <span aria-hidden="true" className="absolute bottom-[7px] right-[8px] h-1.5 w-1.5 rounded-full bg-[#c7a66a] shadow-[0_0_9px_rgba(199,166,106,.9)] motion-safe:animate-pulse"/>
+          </div>
+          <div className="min-w-0">
+            <div className="text-[13px] font-black tracking-[.22em] text-[#f4f5f6] transition-colors group-hover:text-white">FERAH AUTO</div>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-[9px] font-semibold tracking-[.24em] text-[#89919d]">WORKSHOP OS</span>
+              <span aria-hidden="true" className="h-px w-5 bg-gradient-to-r from-[#c7a66a]/80 to-transparent"/>
+            </div>
+          </div>
         </a>
         <div className="eyebrow mb-3 px-3">ATÖLYE YÖNETİMİ</div>
         <nav className="space-y-1">
