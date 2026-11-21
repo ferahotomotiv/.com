@@ -292,23 +292,24 @@ export default function DashboardPage() {
     const phone=String(form.get("contact_phone")||"").trim();
     const normalizedPhone=phone.replace(/\D/g,"");
     if(normalizedPhone.length<10){if(whatsappWindow)whatsappWindow.close();setNotice("Müşteri telefon numarasını kontrol edin.");setSaving(false);return;}
-    const {data:customer,error:customerError}=await supabase.from("customers").upsert({
-      full_name:ownerName,phone,normalized_phone:normalizedPhone,created_by:user.id,updated_at:new Date().toISOString()
-    },{onConflict:"normalized_phone"}).select("id").single();
-    if(customerError||!customer){if(whatsappWindow)whatsappWindow.close();setNotice("Müşteri kaydı oluşturulamadı: "+(customerError?.message||"Bilinmeyen hata"));setSaving(false);return;}
-    const {data:vehicle,error:createError} = await supabase.from("vehicles").insert({
-      customer_id:customer.id,plate, owner_name:ownerName,
-      contact_phone:phone,
-      make:String(form.get("make")||"").trim(), model:String(form.get("model")||"").trim(),
-      complaint:String(form.get("complaint")||"").trim(), created_by:user.id, status:"intake"
-    }).select("id").single();
-    if (createError || !vehicle) { if(whatsappWindow) whatsappWindow.close(); setNotice(createError?.message || "Araç kaydı oluşturulamadı."); setSaving(false); return; }
-    const {error:jobCreateError} = await supabase.from("service_jobs").insert({
-      vehicle_id:vehicle.id, assigned_mechanic_id:assignedStaffId,
-      title:"Araç kabul / ilk inceleme", created_by:user.id, status:"inspecting"
+    const {data:intakeResult,error:intakeError}=await supabase.rpc("create_vehicle_intake",{
+      p_plate:plate,
+      p_owner_name:ownerName,
+      p_contact_phone:phone,
+      p_make:String(form.get("make")||"").trim(),
+      p_model:String(form.get("model")||"").trim(),
+      p_complaint:String(form.get("complaint")||"").trim(),
+      p_assigned_staff_id:assignedStaffId,
+      p_access_code:code
     });
-    if (jobCreateError) { if(whatsappWindow) whatsappWindow.close(); setNotice("Araç kaydedildi ancak sorumlu ataması yapılamadı: "+jobCreateError.message); setSaving(false); await loadData(); return; }
-    const {error:codeError} = await supabase.rpc("set_customer_access_code",{p_vehicle_id:vehicle.id,p_access_code:code});
+    const vehicleId=typeof intakeResult?.vehicle_id==="string"?intakeResult.vehicle_id:null;
+    if(intakeError||!vehicleId) {
+      if(whatsappWindow)whatsappWindow.close();
+      setNotice("Araç kabul kaydı oluşturulamadı: "+(intakeError?.message||"Sunucudan geçerli kayıt kimliği alınamadı."));
+      setSaving(false);
+      return;
+    }
+    const vehicle={id:vehicleId};
     const files = (form.getAll("photos") as File[]).filter(file=>file instanceof File&&file.size>0);
     const safePlate = plate.replace(/[^A-Z0-9]/g,"");
     const photoRows: {vehicle_id:string;storage_path:string;original_name:string;uploaded_by:string}[] = [];
@@ -328,11 +329,8 @@ export default function DashboardPage() {
       const {error:photoDbError}=await supabase.from("vehicle_photos").insert(photoRows);
       if(photoDbError) setNotice("Fotoğraflar depolandı ancak arşiv kayıtları yazılamadı: "+photoDbError.message);
     }
-    if (codeError) {
-      if(whatsappWindow) whatsappWindow.close();
-      setNotice("Araç kaydedildi ancak müşteri erişim kodu oluşturulamadı: "+codeError.message);
-    } else {
-      setAccessCode(code);
+    setAccessCode(code);
+    {
       const customerPhone = String(form.get("contact_phone")||"").replace(/\D/g,"").replace(/^0/,"90");
       const trackingUrl = window.location.origin + "/track";
       const statusText = "Araç kabul edildi";
