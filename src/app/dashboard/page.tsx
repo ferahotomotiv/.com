@@ -476,7 +476,7 @@ export default function DashboardPage() {
 
   return <main className="min-h-screen bg-[#090a0c] text-[#f3f4f6]">
     <div className="flex min-h-screen">
-      <aside className="hidden w-[248px] shrink-0 flex-col border-r border-[#242830] bg-[#0c0e11] px-4 py-6 lg:flex">
+      <aside className="hidden max-h-screen w-[248px] shrink-0 flex-col overflow-y-auto overscroll-contain border-r border-[#242830] bg-[#0c0e11] px-4 py-6 lg:flex">
         <a href="/dashboard" className="mb-10 flex items-center gap-3 px-2">
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-black"><CarFront size={22}/></div>
           <div><div className="text-[14px] font-black tracking-[.2em]">FERAH AUTO</div><div className="eyebrow mt-1">WORKSHOP OS</div></div>
@@ -489,7 +489,7 @@ export default function DashboardPage() {
           <button onClick={()=>setActiveTab("staff")} className="mb-3 w-full rounded-xl border border-white/8 bg-white/[.025] p-3 text-left transition hover:border-white/20 hover:bg-white/[.045]">
             <div className="mb-3 flex items-center justify-between"><span className="text-[10px] font-semibold tracking-[.16em] text-[#8e98a5]">EKİP DURUMU</span><span className="text-[9px] text-[#65707c]">Canlı</span></div>
             <div className="flex items-center gap-3 text-[11px]"><span className="flex items-center gap-1.5 text-emerald-300"><i className="h-2 w-2 rounded-full bg-emerald-400"/>{onlineStaff.length} çevrim içi</span><span className="flex items-center gap-1.5 text-[#929aa6]"><i className="h-2 w-2 rounded-full bg-[#69727e]"/>{offlineStaff.length} çevrim dışı</span></div>
-            {onlineStaff.slice(0,3).map(p=><div key={p.id} className="mt-2 flex items-center justify-between gap-2 text-[10px]"><span className="truncate text-[#b9c1cb]">{p.full_name||p.username||"Personel"}</span><span className="shrink-0 text-emerald-300">● Aktif</span></div>)}
+            <div className="mt-2 max-h-16 space-y-1 overflow-y-auto overscroll-contain pr-1">{onlineStaff.slice(0,2).map(p=><div key={p.id} className="flex min-w-0 items-center justify-between gap-2 text-[10px]"><span className="min-w-0 truncate text-[#b9c1cb]">{p.full_name||p.username||"Personel"}</span><span className="shrink-0 text-emerald-300">● Aktif</span></div>)}</div>{onlineStaff.length>2&&<div className="mt-1 text-[9px] text-[#7f8995]">+{onlineStaff.length-2} kişi daha çevrim içi</div>}
             {onlineStaff.length===0&&<p className="mt-2 text-[10px] text-[#737d89]">Şu anda çevrim içi personel yok.</p>}
             {inactiveStaff.length>0&&<div className="mt-2 border-t border-white/5 pt-2 text-[9px] text-[#6e7783]">{inactiveStaff.length} pasif hesap</div>}
           </button>
