@@ -653,7 +653,7 @@ function JobCard({job,vehicle,staff,isManager,isClosed,history,events,onSave}:{j
     testing:[{value:"ready",label:"Testi tamamla · hazır yap"}],
     ready:[{value:"delivered",label:"Müşteriye teslim et"}]
   };
-  const nextOptions=transitions[job.status]||[];
+  const nextOptions=(transitions[job.status]||[]).filter(option=>option.value!=="delivered"||isManager);
   const assignee=staff.find(s=>s.id===job.assigned_mechanic_id);
   const sortedEvents=[...events].sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime());
   const latestAssignmentId=sortedEvents.find(e=>e.event_type==="assignment")?.id;
