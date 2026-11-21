@@ -55,7 +55,8 @@ export default function DashboardPage() {
   const [showTaskForm,setShowTaskForm] = useState(false);
   const [showExpenseForm,setShowExpenseForm] = useState(false);
   const [accessCode,setAccessCode] = useState("");
-  const [saving,setSaving] = useState(false);\n  const [selectedJobVehicleId,setSelectedJobVehicleId] = useState<string>("");
+  const [saving,setSaving] = useState(false);
+  const [selectedJobVehicleId,setSelectedJobVehicleId] = useState<string>("");
   const [notice,setNotice] = useState("");
   const [messageText,setMessageText] = useState("");
   const [recipient,setRecipient] = useState("all");
