@@ -6,7 +6,7 @@ import {
   Activity, ArrowDownLeft, ArrowRight, ArrowUpRight, Bell, CalendarClock, CarFront, Paperclip, Pin, CheckCheck,
   Check, ChevronDown, CircleDollarSign, ClipboardList, Clock3, Gauge, LayoutDashboard,
   LogOut, Menu, MessageCircle, Plus, RefreshCw, Search, Send, Settings2, Shield,
-  Users, Wrench, X, TrendingUp, AlertCircle, Copy
+  Users, Wrench, X, Package, TrendingUp, AlertCircle, Copy
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
