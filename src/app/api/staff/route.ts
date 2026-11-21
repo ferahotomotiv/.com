@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
     if (password.length < 8 || password.length > 72) {
       return NextResponse.json({ error: "Şifre en az 8, en fazla 72 karakter olmalıdır." }, { status: 400 });
     }
+    if (actor.role !== "admin" && role !== "mechanic") return NextResponse.json({ error: "Yönetici ve supervisor rolleri için personel hesabı oluşturma yetkisi yalnızca Merkez Yöneticiye aittir." }, { status: 403 });
     if (!["manager", "supervisor", "mechanic"].includes(role)) {
       return NextResponse.json({ error: "Geçersiz personel rolü." }, { status: 400 });
     }
@@ -144,8 +145,19 @@ export async function PATCH(request: NextRequest) {
     if (!["admin", "manager"].includes(actor.role) && target.role !== "mechanic") {
       return NextResponse.json({ error: "Supervisor yalnızca usta hesaplarını yönetebilir." }, { status: 403 });
     }
-    if (role !== undefined && !["admin", "manager"].includes(actor.role)) {
-      return NextResponse.json({ error: "Rol değişikliği yalnızca yönetici tarafından yapılabilir." }, { status: 403 });
+    if (role !== undefined && actor.role !== "admin") {
+      return NextResponse.json({ error: "Personel rolünü yalnızca Merkez Yönetici değiştirebilir." }, { status: 403 });
+    }
+    if (actor.role !== "admin" && target.role !== "mechanic") {
+      return NextResponse.json({ error: "Yönetici hesabı yalnızca usta personelin hesap bilgilerini yönetebilir." }, { status: 403 });
+    }
+    if (isActive === false || (role !== undefined && role !== target.role)) {
+      const { count: activeJobCount, error: jobsError } = await admin.from("service_jobs")
+        .select("id", { count: "exact", head: true })
+        .not("status", "in", "(delivered,cancelled)")
+        .or("assigned_mechanic_id.eq."+id+",installation_mechanic_id.eq."+id);
+      if (jobsError) return NextResponse.json({ error: "Personelin aktif iş emirleri kontrol edilemedi: "+jobsError.message }, { status: 500 });
+      if ((activeJobCount||0)>0) return NextResponse.json({ error: "Bu personelin devam eden iş emirleri var. Önce iş emirlerini başka bir ustaya devredin; ardından hesabı pasifleştirebilir veya rolünü değiştirebilirsiniz." }, { status: 409 });
     }
     if (role !== undefined && !["manager", "supervisor", "mechanic"].includes(role)) {
       return NextResponse.json({ error: "Geçersiz rol." }, { status: 400 });
@@ -201,6 +213,13 @@ export async function DELETE(request: NextRequest) {
     const { data: target, error: targetError } = await admin.from("profiles").select("id,role").eq("id", id).single();
     if (targetError || !target) return NextResponse.json({ error: "Personel bulunamadı." }, { status: 404 });
     if (target.role === "admin") return NextResponse.json({ error: "Yönetici hesabı personel listesinden kaldırılamaz." }, { status: 403 });
+    if (actor.role !== "admin" && target.role !== "mechanic") return NextResponse.json({ error: "Yönetici yalnızca usta personel hesabını kaldırabilir; yönetici rolleri Merkez Yönetici tarafından yönetilir." }, { status: 403 });
+    const { count: activeJobCount, error: jobsError } = await admin.from("service_jobs")
+      .select("id", { count: "exact", head: true })
+      .not("status", "in", "(delivered,cancelled)")
+      .or("assigned_mechanic_id.eq."+id+",installation_mechanic_id.eq."+id);
+    if (jobsError) return NextResponse.json({ error: "Personelin aktif iş emirleri kontrol edilemedi: "+jobsError.message }, { status: 500 });
+    if ((activeJobCount||0)>0) return NextResponse.json({ error: "Bu personelin devam eden iş emirleri var. Önce iş emirlerini başka bir ustaya devredin; ardından hesabı silebilirsiniz." }, { status: 409 });
     const { error: authError } = await admin.auth.admin.deleteUser(id);
     if (authError) return NextResponse.json({ error: authError.message }, { status: 400 });
     return NextResponse.json({ ok: true, deleted: true });
