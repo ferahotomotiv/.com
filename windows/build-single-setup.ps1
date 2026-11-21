@@ -24,11 +24,22 @@ if (-not (Test-Path $node) -or -not (Test-Path $npm)) { throw "Bundled Node.js b
 
 $oldPath = $env:PATH
 $env:PATH = "$RuntimeDir;$oldPath"
-Push-Location (Join-Path $RepoRoot "local-server")
+Push-Location $RepoRoot
 try {
-  & $npm install --omit=dev
-  if ($LASTEXITCODE -ne 0) { throw "Production dependencies install failed." }
+  & $npm ci
+  if ($LASTEXITCODE -ne 0) { throw "Frontend dependency installation failed." }
+  & $npm run build
+  if ($LASTEXITCODE -ne 0) { throw "Next.js production build failed." }
 } finally { Pop-Location; $env:PATH = $oldPath }
+
+$standalone = Join-Path $RepoRoot ".next\standalone"
+if (-not (Test-Path (Join-Path $standalone "server.js"))) { throw "Next.js standalone server.js was not generated." }
+$staticSource = Join-Path $RepoRoot ".next\static"
+$staticTarget = Join-Path $standalone ".next\static"
+New-Item -ItemType Directory -Force -Path (Split-Path $staticTarget -Parent) | Out-Null
+if (Test-Path $staticSource) { Copy-Item $staticSource $staticTarget -Recurse -Force }
+$publicSource = Join-Path $RepoRoot "public"
+if (Test-Path $publicSource) { Copy-Item $publicSource (Join-Path $standalone "public") -Recurse -Force }
 
 $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
 if (-not $iscc) {
@@ -38,4 +49,6 @@ if (-not $iscc) {
 } else { $isccPath = $iscc.Source }
 & $isccPath (Join-Path $WindowsDir "FerahAuto.iss")
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
-Write-Host "Single installer created: $(Join-Path $ReleaseDir 'FERAH-AUTO-TEK-KURULUM.exe')"
+$installer = Join-Path $ReleaseDir "FERAH-AUTO-TEK-KURULUM.exe"
+if (-not (Test-Path $installer)) { throw "Installer output is missing." }
+Write-Host "FERAH AUTO desktop application installer created: $installer"
