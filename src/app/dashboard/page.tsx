@@ -529,6 +529,25 @@ export default function DashboardPage() {
         setNotice(normalized.length+" ürün tek seferde kaydedildi. Stok ürünleri depodan düşüldü; tedarikçi siparişleri teslimat takibine alındı.");
         await loadData(); return;
       }
+      if(procurementAction==="update_item") {
+        const itemId=String(f.get("procurement_item_id")||"");
+        const productName=String(f.get("procurement_edit_product_name")||"");
+        const supplier=String(f.get("procurement_edit_supplier")||"");
+        const quantity=Number(f.get("procurement_edit_quantity")||0);
+        const unitCost=Number(f.get("procurement_edit_unit_cost")||0);
+        const expectedAt=String(f.get("procurement_edit_expected_at")||"");
+        if(!itemId||!productName.trim()||!supplier.trim()||!Number.isFinite(quantity)||quantity<=0||!Number.isFinite(unitCost)||unitCost<0||!expectedAt) {
+          setNotice("Ürün adı, tedarikçi, geçerli miktar, birim fiyat ve teslim tarihi zorunludur.");
+          return;
+        }
+        const {error}=await supabase.rpc("update_service_job_procurement_item",{
+          p_item_id:itemId,p_product_name:productName.trim(),p_supplier:supplier.trim(),
+          p_quantity:quantity,p_unit_cost:unitCost,p_expected_at:new Date(expectedAt).toISOString()
+        });
+        if(error) { setNotice("Tedarik bilgileri güncellenemedi: "+error.message); return; }
+        setNotice("Tedarik kalemi güncellendi. İş emrinin toplam tedarik maliyeti yeniden hesaplandı.");
+        await loadData(); return;
+      }
       if(procurementAction==="receive_item") {
         const itemId=String(f.get("procurement_item_id")||"");
         if(!itemId) { setNotice("Teslim alınacak ürün seçilemedi."); return; }
@@ -1027,6 +1046,8 @@ function JobCard({job,vehicle,staff,inventoryProducts,procurementItems,isManager
   const latestAssignmentId=sortedEvents.find(e=>e.event_type==="assignment")?.id;
   const quoteStatus=job.customer_quote_status||"not_prepared";
   const [procurementDrafts,setProcurementDrafts]=useState<ProcurementDraft[]>([{key:"draft-1",source:"warehouse",product_id:"",quantity:"1",product_name:"",supplier:"",unit_cost:"",expected_at:""}]);
+  const [editingProcurementItem,setEditingProcurementItem]=useState<string|null>(null);
+  const [procurementEditDraft,setProcurementEditDraft]=useState({product_name:"",supplier:"",quantity:"1",unit_cost:"0",expected_at:""});
   const updateProcurementDraft=(key:string,patch:Partial<ProcurementDraft>)=>setProcurementDrafts(rows=>rows.map(row=>row.key===key?{...row,...patch}:row));
   return <div className="card overflow-hidden">
     <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 p-5 sm:p-6">
@@ -1034,7 +1055,7 @@ function JobCard({job,vehicle,staff,inventoryProducts,procurementItems,isManager
     </div>
     <div className="mx-5 mt-5 rounded-xl border border-amber-500/30 bg-amber-500/[.07] p-4 sm:mx-6"><div className="mb-2 flex items-center gap-2 text-[10px] font-bold tracking-[.16em] text-amber-200"><span>⚠</span> MÜŞTERİNİN ARACI GETİRME ŞİKAYETİ</div><p className="whitespace-pre-wrap text-sm leading-6 text-[#f0e6d3]">{vehicle?.complaint||"Araç kabulünde müşteri şikayeti girilmemiş."}</p><p className="mt-2 text-[10px] text-amber-100/60">Bu bilgi araç kabulünde kaydedilen müşteri beyanıdır. Teknik arıza tespiti için ustanın inceleme raporunu ayrıca girin.</p></div>
     <div className="grid gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,.85fr)]">
-      <form onSubmit={e=>{e.preventDefault();if(!isClosed)void onSave(job,e.currentTarget)}} className="space-y-4"><input type="hidden" name="quote_action" value=""/><input type="hidden" name="procurement_action" value=""/>
+      <form onSubmit={e=>{e.preventDefault();if(!isClosed)void onSave(job,e.currentTarget)}} className="space-y-4"><input type="hidden" name="quote_action" value=""/><input type="hidden" name="procurement_action" value=""/><input type="hidden" name="procurement_item_id" value=""/>
         <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/[.07] p-4"><div className="eyebrow text-emerald-300">● GÜNCEL SORUMLU PERSONEL</div><div className="mt-1 flex items-center gap-2 text-sm font-semibold text-emerald-300">{assignee?.full_name||"Sorumlu atanmamış"}</div><div className="mt-1 text-[10px] text-emerald-200/70">{assignee?.role==="supervisor"?"Supervisor":assignee?.role==="manager"?"Yönetici":assignee?.job_title||"Usta"}</div></div>
         {isClosed&&<div className="rounded-lg border border-white/10 bg-white/[.03] px-3 py-2.5 text-xs text-[#aeb5bf]">Araç kaydı kapalıdır. İş emri salt okunur.</div>}
         <div className="rounded-xl border border-white/10 bg-black/10 p-4"><div className="eyebrow">SERVİS AŞAMASI</div><div className="mt-1 text-sm font-semibold">{statusLabels[job.status]}</div>
@@ -1074,7 +1095,15 @@ function JobCard({job,vehicle,staff,inventoryProducts,procurementItems,isManager
               <div className="flex items-start justify-between gap-3"><div className="font-semibold">{index+1}. {item.product_name}</div><span className={item.status==="ordered"?"text-amber-200":item.status==="received"?"text-emerald-200":"text-sky-200"}>{item.status==="ordered"?"Sipariş verildi":item.status==="received"?"Teslim alındı":"Stoktan ayrıldı"}</span></div>
               <div className="mt-1 text-[10px] text-[#aeb7c2]">{item.quantity} adet · Birim {money(Number(item.unit_cost))} · Toplam {money(Number(item.total_cost))}</div>
               {item.source==="supplier"&&<div className="mt-1 text-[10px] text-[#8994a1]">{item.supplier||"Tedarikçi belirtilmemiş"}{item.expected_at?" · Tahmini teslim: "+new Date(item.expected_at).toLocaleString("tr-TR",{dateStyle:"short",timeStyle:"short"}):""}</div>}
-              {item.status==="ordered"&&<button type="button" onClick={e=>{const form=e.currentTarget.form;const action=form?.querySelector<HTMLInputElement>('input[name="procurement_action"]');const id=form?.querySelector<HTMLInputElement>('input[name="procurement_item_id"]');if(action)action.value="receive_item";if(id)id.value=item.id;form?.requestSubmit();}} className="mt-2 w-full rounded-lg bg-white px-3 py-2.5 text-[11px] font-semibold text-black">Bu ürün teslim alındı</button>}
+              {item.source==="supplier"&&<div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={()=>{setEditingProcurementItem(item.id);setProcurementEditDraft({product_name:item.product_name||"",supplier:item.supplier||"",quantity:String(item.quantity),unit_cost:String(item.unit_cost),expected_at:item.expected_at?new Date(item.expected_at).toISOString().slice(0,16):""});}} className="rounded-lg border border-white/15 px-3 py-2 text-[11px] text-white">Bilgileri düzenle</button>{item.status==="ordered"&&<button type="button" onClick={e=>{const form=e.currentTarget.form;const action=form?.querySelector<HTMLInputElement>('input[name="procurement_action"]');const id=form?.querySelector<HTMLInputElement>('input[name="procurement_item_id"]');if(action)action.value="receive_item";if(id)id.value=item.id;form?.requestSubmit();}} className="rounded-lg bg-white px-3 py-2 text-[11px] font-semibold text-black">Bu ürün teslim alındı</button>}</div>}
+              {editingProcurementItem===item.id&&<div className="mt-3 space-y-3 rounded-lg border border-amber-400/25 bg-amber-500/[.04] p-3">
+                <div className="eyebrow text-amber-200">TEDARİK BİLGİLERİNİ DÜZENLE</div>
+                <Field label="Ürün adı"><input name="procurement_edit_product_name" value={procurementEditDraft.product_name} onChange={e=>setProcurementEditDraft(v=>({...v,product_name:e.target.value}))} className="w-full px-3 py-2.5 text-xs"/></Field>
+                <Field label="Tedarikçi firma"><input name="procurement_edit_supplier" value={procurementEditDraft.supplier} onChange={e=>setProcurementEditDraft(v=>({...v,supplier:e.target.value}))} className="w-full px-3 py-2.5 text-xs"/></Field>
+                <div className="grid grid-cols-2 gap-2"><Field label="Miktar"><input name="procurement_edit_quantity" type="number" min="0.01" step="0.01" value={procurementEditDraft.quantity} onChange={e=>setProcurementEditDraft(v=>({...v,quantity:e.target.value}))} className="w-full px-3 py-2.5 text-xs"/></Field><Field label="Birim alış fiyatı (₺)"><input name="procurement_edit_unit_cost" type="number" min="0" step="0.01" value={procurementEditDraft.unit_cost} onChange={e=>setProcurementEditDraft(v=>({...v,unit_cost:e.target.value}))} className="w-full px-3 py-2.5 text-xs"/></Field></div>
+                <Field label="Tahmini teslim tarihi"><input name="procurement_edit_expected_at" type="datetime-local" value={procurementEditDraft.expected_at} onChange={e=>setProcurementEditDraft(v=>({...v,expected_at:e.target.value}))} className="w-full px-3 py-2.5 text-xs"/></Field>
+                <div className="flex gap-2"><button type="button" onClick={e=>{const form=e.currentTarget.form;const action=form?.querySelector<HTMLInputElement>('input[name="procurement_action"]');const id=form?.querySelector<HTMLInputElement>('input[name="procurement_item_id"]');if(action)action.value="update_item";if(id)id.value=item.id;form?.requestSubmit();}} className="flex-1 rounded-lg bg-white px-3 py-2.5 text-[11px] font-semibold text-black">Değişiklikleri kaydet</button><button type="button" onClick={()=>setEditingProcurementItem(null)} className="rounded-lg border border-white/15 px-3 py-2.5 text-[11px]">Vazgeç</button></div>
+              </div>}
             </div>)}
             <div className="rounded-lg border border-white/10 p-3 text-xs"><div className="flex justify-between"><span>Toplam tedarik maliyeti</span><strong>{money(procurementItems.reduce((sum,item)=>sum+Number(item.total_cost||0),0))}</strong></div><div className="mt-1 text-[10px] text-[#8994a1]">Siparişi bekleyen ürün: {procurementItems.filter(item=>item.status==="ordered").length}</div></div>
           </div>}
