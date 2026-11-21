@@ -12,7 +12,9 @@ import { createClient } from "@/lib/supabase/client";
 
 type Role = "admin" | "manager" | "supervisor" | "mechanic";
 type VehicleStatus = "intake" | "inspecting" | "waiting_parts" | "repairing" | "testing" | "ready" | "delivered" | "cancelled";
-type Vehicle = { id:string; plate:string; owner_name:string; contact_phone:string; make:string; model:string; complaint:string; status:VehicleStatus; estimated_completion:string|null; received_at:string; photo_path:string|null; showroom_model_path:string|null; showroom_status:string; showroom_updated_at:string|null };
+type Customer = { id:string; full_name:string; phone:string; normalized_phone:string; email:string|null; notes:string|null; created_at:string };
+type CustomerAccessCode = { vehicle_id:string; access_code:string; updated_at:string };
+type Vehicle = { id:string; customer_id:string|null; plate:string; owner_name:string; contact_phone:string; make:string; model:string; complaint:string; status:VehicleStatus; estimated_completion:string|null; received_at:string; photo_path:string|null; showroom_model_path:string|null; showroom_status:string; showroom_updated_at:string|null };
 type Job = { id:string; vehicle_id:string; title:string; diagnosis:string|null; required_parts:string|null; mechanic_notes:string|null; parts_supplier:string|null; parts_expected_at:string|null; status:VehicleStatus; assigned_mechanic_id:string|null; started_at:string|null; completed_at:string|null; created_at:string };
 type Profile = { id:string; full_name:string; username:string|null; contact_phone:string|null; job_title:string|null; role:Role; is_active:boolean; last_seen_at:string|null };
 type Entry = { id:string; entry_type:"income"|"expense"; category:string; description:string; amount:number; entry_date:string; vehicle_id:string|null; recorded_by:string|null; payment_method:string };
@@ -44,6 +46,8 @@ export default function DashboardPage() {
   const [user,setUser] = useState<{id:string;email?:string}|null>(null);
   const [profile,setProfile] = useState<Profile|null>(null);
   const [vehicles,setVehicles] = useState<Vehicle[]>([]);
+  const [customers,setCustomers] = useState<Customer[]>([]);
+  const [customerAccessCodes,setCustomerAccessCodes] = useState<CustomerAccessCode[]>([]);
   const [vehiclePhotos,setVehiclePhotos] = useState<VehiclePhoto[]>([]);
   const [vehiclePhotoUrls,setVehiclePhotoUrls] = useState<Record<string,string>>({});
   const [modelUploadBusy,setModelUploadBusy] = useState<string|null>(null);
@@ -99,15 +103,20 @@ export default function DashboardPage() {
     if (profileError || !profileData || !profileData.is_active) { await supabase.auth.signOut(); router.replace("/login"); return; }
     setProfile(profileData as Profile);
 
-    const [vehicleRes,jobRes,eventRes,staffRes,photoRes] = await Promise.all([
-      supabase.from("vehicles").select("id,plate,owner_name,contact_phone,make,model,complaint,status,estimated_completion,received_at,photo_path,showroom_model_path,showroom_status,showroom_updated_at").order("received_at",{ascending:false}).limit(100),
+    const [vehicleRes,jobRes,eventRes,staffRes,photoRes,customerRes,accessCodeRes] = await Promise.all([
+      supabase.from("vehicles").select("id,customer_id,plate,owner_name,contact_phone,make,model,complaint,status,estimated_completion,received_at,photo_path,showroom_model_path,showroom_status,showroom_updated_at").order("received_at",{ascending:false}).limit(100),
       supabase.from("service_jobs").select("id,vehicle_id,title,diagnosis,required_parts,mechanic_notes,parts_supplier,parts_expected_at,status,assigned_mechanic_id,started_at,completed_at,created_at").order("created_at",{ascending:false}).limit(200),
       supabase.from("vehicle_events").select("id,vehicle_id,actor_id,title,details,status,event_type,customer_visible,created_at").order("created_at",{ascending:false}).limit(500),
       supabase.from("profiles").select("id,full_name,username,contact_phone,job_title,role,is_active,last_seen_at").order("full_name"),
-      supabase.from("vehicle_photos").select("id,vehicle_id,storage_path,original_name,caption,uploaded_by,created_at").order("created_at",{ascending:false}).limit(500)
+      supabase.from("vehicle_photos").select("id,vehicle_id,storage_path,original_name,caption,uploaded_by,created_at").order("created_at",{ascending:false}).limit(500),
+      supabase.from("customers").select("id,full_name,phone,normalized_phone,email,notes,created_at").order("full_name"),
+      supabase.from("customer_vehicle_access_codes").select("vehicle_id,access_code,updated_at")
     ]);
     if (vehicleRes.error) setError(vehicleRes.error.message);
     setVehicles((vehicleRes.data||[]) as Vehicle[]);
+    setCustomers((customerRes.data||[]) as Customer[]);
+    setCustomerAccessCodes((accessCodeRes.data||[]) as CustomerAccessCode[]);
+    if(customerRes.error) setNotice("Müşteri kayıtları yüklenemedi: "+customerRes.error.message);
     const photos=(photoRes.data||[]) as VehiclePhoto[];
     setVehiclePhotos(photos);
     const allPaths=[...new Set([...photos.map(p=>p.storage_path),...(vehicleRes.data||[]).flatMap((v:any)=>[v.photo_path,v.showroom_model_path]).filter(Boolean)])];
@@ -262,9 +271,17 @@ export default function DashboardPage() {
     const assignedStaffId = String(form.get("assigned_staff_id")||"");
     const selectedStaff = staff.find(person=>person.id===assignedStaffId && person.is_active && ["admin","manager","supervisor"].includes(person.role));
     if (!selectedStaff) { if(whatsappWindow) whatsappWindow.close(); setNotice("Araç kabul sorumlusu olarak yalnızca aktif yönetici veya supervisor seçilebilir. Ustalar iş emri aşamasında atanır."); setSaving(false); return; }
+    const ownerName=String(form.get("owner_name")||"").trim();
+    const phone=String(form.get("contact_phone")||"").trim();
+    const normalizedPhone=phone.replace(/\\D/g,"");
+    if(normalizedPhone.length<10){if(whatsappWindow)whatsappWindow.close();setNotice("Müşteri telefon numarasını kontrol edin.");setSaving(false);return;}
+    const {data:customer,error:customerError}=await supabase.from("customers").upsert({
+      full_name:ownerName,phone,normalized_phone:normalizedPhone,created_by:user.id,updated_at:new Date().toISOString()
+    },{onConflict:"normalized_phone"}).select("id").single();
+    if(customerError||!customer){if(whatsappWindow)whatsappWindow.close();setNotice("Müşteri kaydı oluşturulamadı: "+(customerError?.message||"Bilinmeyen hata"));setSaving(false);return;}
     const {data:vehicle,error:createError} = await supabase.from("vehicles").insert({
-      plate, owner_name:String(form.get("owner_name")||"").trim(),
-      contact_phone:String(form.get("contact_phone")||"").trim(),
+      customer_id:customer.id,plate, owner_name:ownerName,
+      contact_phone:phone,
       make:String(form.get("make")||"").trim(), model:String(form.get("model")||"").trim(),
       complaint:String(form.get("complaint")||"").trim(), created_by:user.id, status:"intake"
     }).select("id").single();
@@ -526,6 +543,7 @@ export default function DashboardPage() {
   const tabItems = [
     {id:"overview",label:"Genel Bakış",icon:LayoutDashboard},
     {id:"vehicles",label:"Araçlar",icon:CarFront},
+    ...(isManager?[{id:"customers",label:"Müşteriler",icon:Users}]:[]),
     {id:"jobs",label:"İş Emirleri",icon:ClipboardList},
     ...(isManager?[{id:"staff",label:"Personel",icon:Users},{id:"finance",label:"Finans",icon:CircleDollarSign}]:[]),
     {id:"messages",label:"Mesajlar",icon:MessageCircle},
@@ -590,6 +608,17 @@ export default function DashboardPage() {
 
           {activeTab==="vehicles"&&<div><PageHeading eyebrow="ARAÇ YÖNETİMİ / 02" title="Araç kayıtları" subtitle="Müşteri araçları, servis durumları ve kabul bilgileri." action={isManager?<button onClick={()=>setShowVehicleForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Yeni araç kaydı</button>:null}/><div className="mb-4 flex items-center gap-3 rounded-xl border border-[#292e36] bg-[#101216] px-3"><Search size={16} className="text-[#737b87]"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Plaka, müşteri, marka veya model ara…" className="w-full border-0 !bg-transparent py-3 text-xs !shadow-none !ring-0"/></div><div className="card overflow-hidden"><div className="hidden grid-cols-[1.3fr_1.3fr_1fr_1fr_1.2fr] gap-4 border-b border-white/8 px-5 py-3 text-[10px] uppercase tracking-widest text-[#777f8b] md:grid"><span>Araç / Plaka</span><span>Araç sahibi</span><span>Kabul tarihi</span><span>Durum</span><span>İşlem</span></div>{filteredVehicles.map(v=><div key={v.id} className="grid gap-3 border-b border-white/5 px-5 py-4 last:border-0 md:grid-cols-[1.3fr_1.3fr_1fr_1fr_1.2fr] md:items-center md:gap-4"><div><div>{(vehiclePhotos.filter(p=>p.vehicle_id===v.id).length>0||v.photo_path)&&<div className="mb-2 flex flex-wrap gap-1.5">{(vehiclePhotos.filter(p=>p.vehicle_id===v.id).map(p=>p.storage_path).concat(v.photo_path&&!vehiclePhotos.some(p=>p.vehicle_id===v.id&&p.storage_path===v.photo_path)?[v.photo_path]:[])).slice(0,4).map(path=>vehiclePhotoUrls[path]&&<a key={path} href={vehiclePhotoUrls[path]} target="_blank" rel="noreferrer" title="Araç fotoğrafını aç"><img src={vehiclePhotoUrls[path]} alt="Araç fotoğrafı" className="h-12 w-16 rounded-md border border-white/10 object-cover"/></a>)}</div>}{v.showroom_model_path&&vehiclePhotoUrls[v.showroom_model_path]&&<div className="mb-2 overflow-hidden rounded-lg border border-white/10 bg-black/20">{createElement("model-viewer" as any,{src:vehiclePhotoUrls[v.showroom_model_path],alt:v.make+" "+v.model+" "+v.plate,"camera-controls":true,"auto-rotate":true,"rotation-per-second":"10deg","shadow-intensity":"1",style:{width:"100%",height:"112px",background:"transparent"}})}</div>}<div className="font-semibold text-sm">{v.make} {v.model}</div><div className="mt-1 text-[11px] tracking-wider text-[#8d95a1]">{v.plate}</div>{v.showroom_model_path&&vehiclePhotoUrls[v.showroom_model_path]?<div className="mt-2 inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[9px] text-emerald-200">3D showroom hazır</div>:<div className="mt-2 inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1 text-[9px] text-[#929ba7]">Fotoğraf showroom görünümü</div>}<div className="mt-1 text-[10px] text-[#7f8995]">{vehiclePhotos.filter(p=>p.vehicle_id===v.id).length+(v.photo_path&&!vehiclePhotos.some(p=>p.vehicle_id===v.id&&p.storage_path===v.photo_path)?1:0)} fotoğraf arşivde</div></div></div><div><div className="text-xs">{v.owner_name}</div><div className="mt-1 text-[10px] text-[#777f8b]">{v.contact_phone}</div><div className="mt-1 text-[10px] text-[#aeb5bf]">Sorumlu: {staff.find(s=>s.id===jobs.find(j=>j.vehicle_id===v.id)?.assigned_mechanic_id)?.full_name||"Atanmadı"}</div>{vehicleEvents.find(e=>e.vehicle_id===v.id)?.actor_id&&<div className="mt-1 text-[10px] text-[#7f8792]">Son işlem: {staff.find(s=>s.id===vehicleEvents.find(e=>e.vehicle_id===v.id)?.actor_id)?.full_name||"Personel"}</div>}</div><div className="text-xs text-[#a0a7b1]">{dateTime(v.received_at)}</div><div><StatusPill status={v.status}/></div><div>{isManager&&v.status==="delivered"?<div className="grid gap-2"><div className="rounded-lg border border-white/10 bg-[#111419] px-3 py-2 text-[11px] text-[#aeb5bf]">Teslim edildi · Kapalı kayıt</div>{isAdmin&&<button onClick={()=>void reopenDeliveredVehicle(v)} className="rounded-lg border border-amber-500/30 px-3 py-2 text-[10px] text-amber-200 hover:bg-amber-500/10">Servisi yeniden aç</button>}</div>:isManager&&<select value={v.status} onChange={e=>void updateVehicleStatus(v,e.target.value as VehicleStatus)} className="w-full rounded-lg px-2 py-2 text-[11px]"><option value="intake">Araç kabul</option><option value="inspecting">İnceleniyor</option><option value="waiting_parts">Parça bekliyor</option><option value="repairing">Onarılıyor</option><option value="testing">Test aşaması</option><option value="ready">Hazır</option><option value="delivered">Teslim edildi</option><option value="cancelled">İptal</option></select>}<div className="mt-2 text-[10px] text-[#737b87]">{v.complaint.slice(0,70)}{v.complaint.length>70?"…":""}</div>{profile?.role==="admin"&&<button onClick={()=>void deleteAdminRecord("vehicle",v.id,v.plate)} className="mt-2 rounded-lg border border-red-500/30 px-3 py-1.5 text-[10px] text-red-300 hover:bg-red-500/10">Aracı kalıcı sil</button>}</div></div>)}{filteredVehicles.length===0&&<EmptyState title="Eşleşen araç bulunamadı" text="Arama ifadesini değiştirin veya yeni bir araç kaydı oluşturun."/>}</div></div>}
 
+          {activeTab==="customers"&&isManager&&<div>
+            <PageHeading eyebrow="MÜŞTERİ YÖNETİMİ / 03" title="Müşteri kayıtları" subtitle="Müşteri iletişim bilgileri, sorgu kodları ve müşteriye bağlı tüm araçlar."/>
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-[#292e36] bg-[#101216] px-3"><Search size={16} className="text-[#737b87]"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Müşteri adı, telefon, plaka veya araç ara…" className="w-full border-0 !bg-transparent py-3 text-xs !shadow-none !ring-0"/></div>
+            <div className="space-y-3">{customers.filter(customer=>{const q=search.toLocaleLowerCase("tr-TR");const linked=vehicles.filter(v=>v.customer_id===customer.id);return !q||customer.full_name.toLocaleLowerCase("tr-TR").includes(q)||customer.phone.includes(q)||linked.some(v=>(v.plate+" "+v.make+" "+v.model).toLocaleLowerCase("tr-TR").includes(q));}).map(customer=>{const linked=vehicles.filter(v=>v.customer_id===customer.id);return <section key={customer.id} className="card overflow-hidden">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 p-5"><div><div className="text-sm font-semibold">{customer.full_name}</div><div className="mt-1 text-xs text-[#9ba4b1]">{customer.phone}</div>{customer.email&&<div className="mt-1 text-[10px] text-[#77818e]">{customer.email}</div>}</div><span className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] text-[#b8c0cb]">{linked.length} kayıtlı araç</span></div>
+              <div className="divide-y divide-white/5">{linked.map(vehicle=>{const code=customerAccessCodes.find(item=>item.vehicle_id===vehicle.id);return <div key={vehicle.id} className="grid gap-2 px-5 py-4 md:grid-cols-[1.2fr_1fr_1fr] md:items-center"><div><div className="text-xs font-medium">{vehicle.make} {vehicle.model}</div><div className="mt-1 text-[10px] tracking-wider text-[#8f99a6]">{vehicle.plate}</div><div className="mt-1 text-[10px] text-[#7c8794]">{dateTime(vehicle.received_at)}</div></div><div><div className="eyebrow">MÜŞTERİ SORGULAMA KODU</div><div className="mt-1 flex items-center gap-2"><code className="text-xs tracking-wider text-[#e1c58b]">{code?.access_code||"Eski kayıt · kod arşivlenmemiş"}</code>{code&&<button onClick={()=>void navigator.clipboard.writeText(code.access_code)} className="rounded-md border border-white/10 p-1.5 text-[#aeb7c4]" title="Kodu kopyala"><Copy size={12}/></button>}</div></div><div className="text-xs"><StatusPill status={vehicle.status}/></div></div>;})}
+              {linked.length===0&&<div className="px-5 py-4 text-xs text-[#818b98]">Henüz araç kaydı bağlanmamış.</div>}</div>
+            </section>;})}
+            {customers.length===0&&<EmptyState title="Henüz müşteri kaydı yok" text="Yeni araç kabulü sırasında müşteri bilgileri otomatik olarak bu rehbere eklenir."/>}
+            </div>
+          </div>}
           {activeTab==="jobs"&&<div>
             <PageHeading eyebrow="ATÖLYE OPERASYONU / 03" title="İş emirleri" subtitle="Her araç için tek aktif sorumlu, kontrollü servis aşamaları ve personel işlem geçmişi." action={isManager?<button onClick={()=>setShowTaskForm(true)} className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-semibold text-black"><Plus size={15}/> Görev ata / Sorumlu değiştir</button>:null}/>
             <div className="mb-5 flex gap-2 overflow-x-auto pb-2">{currentJobs.map(job=>{const v=vehicleMap.get(job.vehicle_id);return <button key={job.vehicle_id} onClick={()=>setSelectedJobVehicleId(job.vehicle_id)} className={`shrink-0 rounded-xl border px-4 py-3 text-left ${selectedJob?.vehicle_id===job.vehicle_id?"border-white bg-white text-black":"border-white/10 bg-white/[.03] text-[#c3c9d2] hover:bg-white/[.07]"}`}><span className="block text-xs font-semibold">{v?.plate||"Plaka yok"}</span><span className="mt-1 block text-[10px] opacity-70">{v?v.make+" "+v.model:"Araç"} · {statusLabels[job.status]}</span></button>})}</div>
