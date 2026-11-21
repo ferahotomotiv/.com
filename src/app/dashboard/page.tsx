@@ -55,7 +55,8 @@ export default function DashboardPage() {
   const [jobs,setJobs] = useState<Job[]>([]);
   const [vehicleEvents,setVehicleEvents] = useState<VehicleEvent[]>([]);
   const [staff,setStaff] = useState<Profile[]>([]);
-  const [entries,setEntries] = useState<Entry[]>([]);\n  const [inventoryProducts,setInventoryProducts] = useState<InventoryProduct[]>([]);
+  const [entries,setEntries] = useState<Entry[]>([]);
+  const [inventoryProducts,setInventoryProducts] = useState<InventoryProduct[]>([]);
   const [messages,setMessages] = useState<Message[]>([]);
   const [activeTab,setActiveTab] = useState("overview");
   const [loading,setLoading] = useState(true);
@@ -111,7 +112,8 @@ export default function DashboardPage() {
       supabase.from("profiles").select("id,full_name,username,contact_phone,job_title,role,is_active,last_seen_at").order("full_name"),
       supabase.from("vehicle_photos").select("id,vehicle_id,storage_path,original_name,caption,uploaded_by,created_at").order("created_at",{ascending:false}).limit(500),
       supabase.from("customers").select("id,full_name,phone,normalized_phone,email,notes,created_at").order("full_name"),
-      supabase.from("customer_vehicle_access_codes").select("vehicle_id,access_code,updated_at"),\n      supabase.from("inventory_products").select("id,name,sku,unit,quantity,unit_cost,min_quantity,is_active,created_at").eq("is_active",true).order("name")
+      supabase.from("customer_vehicle_access_codes").select("vehicle_id,access_code,updated_at"),
+      supabase.from("inventory_products").select("id,name,sku,unit,quantity,unit_cost,min_quantity,is_active,created_at").eq("is_active",true).order("name")
     ]);
     if (vehicleRes.error) setError(vehicleRes.error.message);
     setVehicles((vehicleRes.data||[]) as Vehicle[]);
@@ -455,7 +457,47 @@ export default function DashboardPage() {
       return;
     }
     if(!isManager) { setNotice("Bu işlem için yönetici veya supervisor yetkisi gerekiyor."); return; }
-    const procurementAction=String(f.get("procurement_action")||"");\n    if(procurementAction) {\n      if(!isManager) { setNotice("Tedarik ve montaj görevlendirmesi yalnızca yönetim yetkisindedir."); return; }\n      if(job.customer_quote_status!=="approved") { setNotice("Önce müşteri fiyat teklifi onaylanmalıdır."); return; }\n      if(procurementAction==="reserve_stock") {\n        const productId=String(f.get("procurement_product_id")||""); const qty=Number(f.get("procurement_quantity")||1);\n        if(!productId||!Number.isFinite(qty)||qty<=0) { setNotice("Stok ürünü ve miktarı seçin."); return; }\n        const {error}=await supabase.rpc("fulfill_service_job_from_stock",{p_job_id:job.id,p_product_id:productId,p_quantity:qty});\n        if(error) { setNotice("Stoktan ürün ayrılamadı: "+error.message); return; }\n        const product=inventoryProducts.find(p=>p.id===productId);\n        await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"procurement",title:"Mevcut stoktan ürün işleme alındı",details:(product?.name||"Stok ürünü")+" · "+qty+" "+(product?.unit||"adet")+" stoktan düşüldü.",status:"waiting_parts",customer_visible:true});\n        setNotice("Ürün işletme stokundan düşüldü ve bu iş emri için ayrıldı. Şimdi montaj ustasını görevlendirebilirsiniz."); await loadData(); return;\n      }\n      if(procurementAction==="place_order") {\n        const productName=String(f.get("procurement_product_name")||"").trim(); const supplier=String(f.get("procurement_supplier")||"").trim(); const qty=Number(f.get("procurement_order_quantity")||0); const unitCost=Number(f.get("procurement_unit_cost")||0); const expected=String(f.get("procurement_expected_at")||"");\n        if(!productName||!supplier||!Number.isFinite(qty)||qty<=0||!Number.isFinite(unitCost)||unitCost<0) { setNotice("Ürün adı, tedarikçi, miktar ve alış fiyatı zorunludur."); return; }\n        const {error}=await supabase.from("service_jobs").update({procurement_status:"ordered",procurement_source:"supplier",procurement_product_id:null,procurement_product_name:productName,procurement_supplier:supplier,procurement_quantity:qty,procurement_unit_cost:unitCost,procurement_total_cost:qty*unitCost,procurement_expected_at:expected?new Date(expected).toISOString():null,procurement_ordered_at:new Date().toISOString(),status:"waiting_parts"}).eq("id",job.id);\n        if(error) { setNotice("Sipariş kaydedilemedi: "+error.message); return; }\n        await supabase.from("vehicles").update({status:"waiting_parts"}).eq("id",job.vehicle_id);\n        await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"procurement",title:"Tedarikçiye ürün siparişi verildi",details:productName+" · "+supplier+" · "+qty+" adet · Birim alış: "+money(unitCost),status:"waiting_parts",customer_visible:true});\n        setNotice("Ürün siparişi kaydedildi. Ürün geldiğinde teslim alındı olarak işaretleyin."); await loadData(); return;\n      }\n      if(procurementAction==="receive_order") {\n        const {error}=await supabase.rpc("receive_service_job_purchase",{p_job_id:job.id,p_product_name:job.procurement_product_name||"",p_supplier:job.procurement_supplier||"",p_quantity:Number(job.procurement_quantity||0),p_unit_cost:Number(job.procurement_unit_cost||0)});\n        if(error) { setNotice("Sipariş teslim alınamadı: "+error.message); return; }\n        await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"procurement",title:"Sipariş edilen ürün teslim alındı",details:(job.procurement_product_name||"Ürün")+" · "+(job.procurement_supplier||"Tedarikçi")+" teslimatı alındı. Montaj ustası bekleniyor.",status:"waiting_parts",customer_visible:true});\n        setNotice("Ürün teslim alındı. Şimdi montaj ustasını görevlendirebilirsiniz."); await loadData(); return;\n      }\n      if(procurementAction==="assign_installation") {\n        const mechanicId=String(f.get("installation_mechanic_id")||"");\n        if(!mechanicId) { setNotice("Montajı yapacak ustayı seçin."); return; }\n        const {error}=await supabase.rpc("assign_service_job_installation",{p_job_id:job.id,p_mechanic_id:mechanicId});\n        if(error) { setNotice("Montaj görevi atanamadı: "+error.message); return; }\n        const mechanic=staff.find(person=>person.id===mechanicId);\n        await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"assignment",title:"Ürün montajı için usta görevlendirildi",details:(mechanic?.full_name||"Usta")+" montaj ve teknik işlem için görevlendirildi.",status:"repairing",customer_visible:false});\n        await supabase.from("vehicles").update({status:"repairing"}).eq("id",job.vehicle_id);\n        setNotice("Montaj ustası görevlendirildi. İş emri ustanın ekranına aktarıldı."); await loadData(); return;\n      }\n    }\n    const quoteAction=String(f.get("quote_action")||"");
+    const procurementAction=String(f.get("procurement_action")||"");
+    if(procurementAction) {
+      if(!isManager) { setNotice("Tedarik ve montaj görevlendirmesi yalnızca yönetim yetkisindedir."); return; }
+      if(job.customer_quote_status!=="approved") { setNotice("Önce müşteri fiyat teklifi onaylanmalıdır."); return; }
+      if(procurementAction==="reserve_stock") {
+        const productId=String(f.get("procurement_product_id")||""); const qty=Number(f.get("procurement_quantity")||1);
+        if(!productId||!Number.isFinite(qty)||qty<=0) { setNotice("Stok ürünü ve miktarı seçin."); return; }
+        const {error}=await supabase.rpc("fulfill_service_job_from_stock",{p_job_id:job.id,p_product_id:productId,p_quantity:qty});
+        if(error) { setNotice("Stoktan ürün ayrılamadı: "+error.message); return; }
+        await supabase.from("vehicles").update({status:"waiting_parts"}).eq("id",job.vehicle_id);
+        const product=inventoryProducts.find(p=>p.id===productId);
+        await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"procurement",title:"Mevcut stoktan ürün işleme alındı",details:(product?.name||"Stok ürünü")+" · "+qty+" "+(product?.unit||"adet")+" stoktan düşüldü.",status:"waiting_parts",customer_visible:true});
+        setNotice("Ürün işletme stokundan düşüldü ve bu iş emri için ayrıldı. Şimdi montaj ustasını görevlendirebilirsiniz."); await loadData(); return;
+      }
+      if(procurementAction==="place_order") {
+        const productName=String(f.get("procurement_product_name")||"").trim(); const supplier=String(f.get("procurement_supplier")||"").trim(); const qty=Number(f.get("procurement_order_quantity")||0); const unitCost=Number(f.get("procurement_unit_cost")||0); const expected=String(f.get("procurement_expected_at")||"");
+        if(!productName||!supplier||!Number.isFinite(qty)||qty<=0||!Number.isFinite(unitCost)||unitCost<0) { setNotice("Ürün adı, tedarikçi, miktar ve alış fiyatı zorunludur."); return; }
+        const {error}=await supabase.from("service_jobs").update({procurement_status:"ordered",procurement_source:"supplier",procurement_product_id:null,procurement_product_name:productName,procurement_supplier:supplier,procurement_quantity:qty,procurement_unit_cost:unitCost,procurement_total_cost:qty*unitCost,procurement_expected_at:expected?new Date(expected).toISOString():null,procurement_ordered_at:new Date().toISOString(),status:"waiting_parts"}).eq("id",job.id);
+        if(error) { setNotice("Sipariş kaydedilemedi: "+error.message); return; }
+        await supabase.from("vehicles").update({status:"waiting_parts"}).eq("id",job.vehicle_id);
+        await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"procurement",title:"Tedarikçiye ürün siparişi verildi",details:productName+" · "+supplier+" · "+qty+" adet · Birim alış: "+money(unitCost),status:"waiting_parts",customer_visible:true});
+        setNotice("Ürün siparişi kaydedildi. Ürün geldiğinde teslim alındı olarak işaretleyin."); await loadData(); return;
+      }
+      if(procurementAction==="receive_order") {
+        const {error}=await supabase.rpc("receive_service_job_purchase",{p_job_id:job.id,p_product_name:job.procurement_product_name||"",p_supplier:job.procurement_supplier||"",p_quantity:Number(job.procurement_quantity||0),p_unit_cost:Number(job.procurement_unit_cost||0)});
+        if(error) { setNotice("Sipariş teslim alınamadı: "+error.message); return; }
+        await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"procurement",title:"Sipariş edilen ürün teslim alındı",details:(job.procurement_product_name||"Ürün")+" · "+(job.procurement_supplier||"Tedarikçi")+" teslimatı alındı. Montaj ustası bekleniyor.",status:"waiting_parts",customer_visible:true});
+        setNotice("Ürün teslim alındı. Şimdi montaj ustasını görevlendirebilirsiniz."); await loadData(); return;
+      }
+      if(procurementAction==="assign_installation") {
+        const mechanicId=String(f.get("installation_mechanic_id")||"");
+        if(!mechanicId) { setNotice("Montajı yapacak ustayı seçin."); return; }
+        const {error}=await supabase.rpc("assign_service_job_installation",{p_job_id:job.id,p_mechanic_id:mechanicId});
+        if(error) { setNotice("Montaj görevi atanamadı: "+error.message); return; }
+        const mechanic=staff.find(person=>person.id===mechanicId);
+        await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"assignment",title:"Ürün montajı için usta görevlendirildi",details:(mechanic?.full_name||"Usta")+" montaj ve teknik işlem için görevlendirildi.",status:"repairing",customer_visible:false});
+        await supabase.from("vehicles").update({status:"repairing"}).eq("id",job.vehicle_id);
+        setNotice("Montaj ustası görevlendirildi. İş emri ustanın ekranına aktarıldı."); await loadData(); return;
+      }
+    }
+    const quoteAction=String(f.get("quote_action")||"");
     if(quoteAction) {
       if(quoteAction==="send_quote") {
         const parts=Number(f.get("manager_parts_cost")||0);
