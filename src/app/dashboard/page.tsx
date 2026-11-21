@@ -638,14 +638,11 @@ export default function DashboardPage() {
     if(vehicle.status!=="delivered") return;
     const confirmed = window.confirm(vehicle.plate+" plakalı teslim edilmiş araç yeniden servise alınsın mı? Bu işlem kayıt altına alınacaktır.");
     if(!confirmed) return;
-    const {error:updateError} = await supabase.from("vehicles").update({status:"intake"}).eq("id",vehicle.id).eq("status","delivered");
-    if(updateError) { setNotice(updateError.message); return; }
-    const {error:eventError} = await supabase.from("vehicle_events").insert({
-      vehicle_id:vehicle.id,actor_id:user.id,event_type:"status",title:"Servis yeniden açıldı",
-      status:"intake",details:"Admin/Yönetici tarafından teslim edilmiş araç için yeni servis süreci başlatıldı.",customer_visible:true
-    });
-    if(eventError) { setNotice("Araç yeniden açıldı ancak işlem geçmişi yazılamadı: "+eventError.message); }
-    else setNotice("Araç yeniden servise alındı. İşlemi yapan yönetici ve tarih kaydedildi.");
+    const {data:newJobId,error:reopenError} = await supabase.rpc("reopen_delivered_vehicle_service",{p_vehicle_id:vehicle.id});
+    if(reopenError) { setNotice("Araç yeniden servise açılamadı: "+reopenError.message); return; }
+    setSelectedJobVehicleId(vehicle.id);
+    setActiveTab("jobs");
+    setNotice("Araç yeniden servise alındı ve yeni bir iş emri oluşturuldu ("+String(newJobId).slice(0,8)+").");
     await loadData();
   }
 
