@@ -35,7 +35,7 @@ export async function DELETE(request: NextRequest) {
 
     if (type === "vehicle") {
       const { data: vehicle, error: lookupError } = await admin
-        .from("vehicles").select("id,plate,photo_path").eq("id", id).single();
+        .from("vehicles").select("id,plate,photo_path,customer_id").eq("id", id).single();
       if (lookupError) return NextResponse.json({ error: "Araç kaydı okunamadı: " + lookupError.message }, { status: 500 });
       if (!vehicle) return NextResponse.json({ error: "Bu kimlikle eşleşen araç kaydı bulunamadı." }, { status: 404 });
       if (vehicle.photo_path) {
@@ -44,7 +44,31 @@ export async function DELETE(request: NextRequest) {
       }
       const { error } = await admin.from("vehicles").delete().eq("id", id);
       if (error) return NextResponse.json({ error: "Araç silinemedi: " + error.message }, { status: 500 });
-      return NextResponse.json({ ok: true, deleted: "vehicle", label: vehicle.plate });
+
+      let deletedCustomer = false;
+      if (vehicle.customer_id) {
+        const { count, error: countError } = await admin
+          .from("vehicles").select("id", { count: "exact", head: true })
+          .eq("customer_id", vehicle.customer_id);
+        if (countError) {
+          return NextResponse.json({
+            ok: true, deleted: "vehicle", label: vehicle.plate, customerCleanupPending: true,
+            warning: "Araç silindi ancak müşterinin başka aracı olup olmadığı doğrulanamadı: " + countError.message
+          });
+        }
+        if (count === 0) {
+          const { error: customerDeleteError } = await admin
+            .from("customers").delete().eq("id", vehicle.customer_id);
+          if (customerDeleteError) {
+            return NextResponse.json({
+              ok: true, deleted: "vehicle", label: vehicle.plate, customerCleanupPending: true,
+              warning: "Araç silindi ancak artık aracı kalmayan müşteri kaydı silinemedi: " + customerDeleteError.message
+            });
+          }
+          deletedCustomer = true;
+        }
+      }
+      return NextResponse.json({ ok: true, deleted: "vehicle", label: vehicle.plate, deletedCustomer });
     }
 
     const { data: entry, error: lookupError } = await admin
