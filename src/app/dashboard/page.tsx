@@ -342,6 +342,21 @@ export default function DashboardPage() {
     const nextStatus=(requestedStage||job.status) as VehicleStatus;
     const transitions:Record<string,string[]> = {inspecting:["waiting_parts","repairing"],waiting_parts:["repairing"],repairing:["testing"],testing:["ready"],ready:["delivered"]};
     if(requestedStage && !(transitions[job.status]||[]).includes(requestedStage)) { setNotice("Bu aşamaya doğrudan geçilemez. Sıradaki aşamayı seçin."); return; }
+    if(requestedStage==="delivered" && !isManager) { setNotice("Aracı müşteriye yalnızca yönetici veya supervisor teslim edebilir."); return; }
+    let deliveryAssignee:Profile|undefined;
+    if(requestedStage==="ready") {
+      const eligible=(person:Profile)=>person.is_active && ["admin","manager","supervisor"].includes(person.role);
+      const previousManagerEvent=vehicleEvents
+        .filter(e=>e.vehicle_id===job.vehicle_id && e.event_type==="assignment")
+        .sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime())
+        .find(e=>{const person=staff.find(s=>s.id===e.actor_id);return !!person && eligible(person);});
+      const currentPerson=staff.find(s=>s.id===user.id);
+      deliveryAssignee=(currentPerson&&eligible(currentPerson)?currentPerson:undefined)
+        || (previousManagerEvent?staff.find(s=>s.id===previousManagerEvent.actor_id):undefined)
+        || staff.find(s=>eligible(s)&&s.role==="supervisor")
+        || staff.find(s=>eligible(s)&&(s.role==="manager"||s.role==="admin"));
+      if(!deliveryAssignee) { setNotice("Araç hazır aşamasına alınamadı: teslimat için aktif bir yönetici veya supervisor bulunamadı."); return; }
+    }
     const diagnosis=String(f.get("diagnosis")||"").trim();
     const requiredParts=String(f.get("required_parts")||"").trim();
     const mechanicNotes=String(f.get("mechanic_notes")||"").trim();
@@ -350,6 +365,7 @@ export default function DashboardPage() {
     if(nextStatus==="waiting_parts" && (!partsSupplier || !partsExpectedRaw)) { setNotice("Parça bekleniyor aşamasında temin sorumlusu ve tahmini geliş zamanı zorunludur."); return; }
     const patch:Record<string,unknown>={diagnosis,required_parts:requiredParts,mechanic_notes:mechanicNotes,parts_supplier:partsSupplier||null,parts_expected_at:partsExpectedRaw?new Date(partsExpectedRaw).toISOString():null};
     if(requestedStage) patch.status=nextStatus;
+    if(requestedStage==="ready" && deliveryAssignee) patch.assigned_mechanic_id=deliveryAssignee.id;
     if(nextStatus==="repairing" && !job.started_at) patch.started_at=new Date().toISOString();
     if(nextStatus==="delivered" && requestedStage) patch.completed_at=new Date().toISOString();
     const {error:updateError}=await supabase.from("service_jobs").update(patch).eq("id",job.id);
@@ -361,7 +377,12 @@ export default function DashboardPage() {
       if(vehicleError) { setNotice("İş emri güncellendi ancak araç durumu güncellenemedi: "+vehicleError.message); await loadData(); return; }
       const safeDetails=nextStatus==="waiting_parts"?"Gerekli parçanın temini planlandı.":nextStatus==="ready"?"Servis işlemleri tamamlandı; araç teslim için hazır.":nextStatus==="delivered"?"Araç müşteriye teslim edildi.":"Aracın servis aşaması güncellendi.";
       const {error:eventError}=await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"stage",title:statusLabels[nextStatus],details:safeDetails,status:nextStatus,customer_visible:true});
-      setNotice(eventError?"Aşama ilerletildi ancak işlem geçmişi yazılamadı: "+eventError.message:"Servis aşaması ilerletildi; işlemi yapan personel kaydedildi.");
+      let assignmentError: {message:string}|null=null;
+      if(nextStatus==="ready" && deliveryAssignee) {
+        const result=await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"assignment",title:"Teslimat sorumlusu atandı",details:deliveryAssignee.full_name+" ("+(deliveryAssignee.role==="supervisor"?"Supervisor":"Yönetici")+") araç müşteriye teslim edilmek üzere sorumlu olarak atandı.",status:"ready",customer_visible:false});
+        assignmentError=result.error;
+      }
+      setNotice(eventError?"Aşama ilerletildi ancak işlem geçmişi yazılamadı: "+eventError.message:assignmentError?"Araç hazır olarak kaydedildi ancak teslimat atama geçmişi yazılamadı: "+assignmentError.message:nextStatus==="ready"?"Araç hazır. Teslimat sorumlusu: "+(deliveryAssignee?.full_name||"Yönetici")+". Müşteriye teslim yetkisi yönetici ve supervisorlara aktarıldı.":"Servis aşaması ilerletildi; işlemi yapan personel kaydedildi.");
     } else setNotice("İş emri detayları kaydedildi. Servis aşaması değişmedi.");
     await loadData();
   }
