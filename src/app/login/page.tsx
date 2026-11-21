@@ -17,7 +17,13 @@ export default function LoginPage() {
       const saved = window.localStorage.getItem("ferah-auto-saved-username");
       if (saved) setEmail(saved);
     } catch { /* storage may be unavailable */ }
-  }, []);
+    void supabase?.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        router.replace("/dashboard");
+        router.refresh();
+      }
+    });
+  }, [router, supabase]);
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
