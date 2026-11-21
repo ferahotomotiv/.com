@@ -2,6 +2,11 @@ name: Build FERAH AUTO Single Windows Setup
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "windows/**"
+      - "local-server/**"
+      - ".github/workflows/build-windows-installer.yml"
 
 permissions:
   contents: read
