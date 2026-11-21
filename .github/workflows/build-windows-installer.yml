@@ -1,4 +1,4 @@
-name: Build FERAH AUTO Single Windows Setup
+name: Build FERAH AUTO Windows Desktop Setup
 
 on:
   workflow_dispatch:
@@ -6,10 +6,9 @@ on:
     paths:
       - "src/**"
       - "public/**"
+      - "desktop/**"
       - "package.json"
-      - "next.config.mjs"
       - "windows/**"
-      - "local-server/**"
       - ".github/workflows/build-windows-installer.yml"
 
 permissions:
@@ -28,13 +27,13 @@ jobs:
       - name: Install Inno Setup 6
         shell: pwsh
         run: choco install innosetup --yes --no-progress
-      - name: Build frontend and single installer
+      - name: Build desktop shell and installer
         shell: pwsh
         run: .\windows\build-single-setup.ps1
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: FERAH-AUTO-TEK-KURULUM-WINDOWS-x64
-          path: release/FERAH-AUTO-TEK-KURULUM.exe
+          name: FERAH-AUTO-WINDOWS-KURULUM-x64
+          path: release/FERAH-AUTO-WINDOWS-KURULUM.exe
           if-no-files-found: error
           retention-days: 30
