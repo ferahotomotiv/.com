@@ -676,7 +676,8 @@ export default function DashboardPage() {
     {id:"overview",label:"Genel Bakış",icon:LayoutDashboard},
     {id:"vehicles",label:"Araçlar",icon:CarFront},
     ...(isManager?[{id:"customers",label:"Müşteriler",icon:Users}]:[]),
-    {id:"jobs",label:"İş Emirleri",icon:ClipboardList},\n    ...(isManager?[{id:"inventory",label:"Stok / Tedarik",icon:Package}]:[]),
+    {id:"jobs",label:"İş Emirleri",icon:ClipboardList},
+    ...(isManager?[{id:"inventory",label:"Stok / Tedarik",icon:Package}]:[]),
     ...(isManager?[{id:"staff",label:"Personel",icon:Users},{id:"finance",label:"Finans",icon:CircleDollarSign}]:[]),
     {id:"messages",label:"Mesajlar",icon:MessageCircle},
     {id:"track",label:"Müşteri Sorgu",icon:Search}
