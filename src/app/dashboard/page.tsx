@@ -42,6 +42,34 @@ const statusClasses: Record<VehicleStatus,string> = {
 };
 const money = (n:number) => new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY",maximumFractionDigits:0}).format(Number(n||0));
 const dateTime = (s:string) => new Date(s).toLocaleString("tr-TR",{dateStyle:"medium",timeStyle:"short"});
+const escapePrintHtml = (value:unknown) => String(value??"").replace(/[&<>"']/g, ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]||ch));
+function printCustomerServiceForm(job:Job,vehicle?:Vehicle) {
+  if(!vehicle) return;
+  const plate=vehicle.plate;
+  const trackingUrl=window.location.origin+"/track?plate="+encodeURIComponent(plate);
+  const qrUrl="https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&data="+encodeURIComponent(trackingUrl);
+  const parts=Number(job.manager_parts_cost||0);
+  const labor=Number(job.manager_labor_cost||0);
+  const total=parts+labor;
+  const popup=window.open("","_blank","width=900,height=900");
+  if(!popup) { window.alert("Yazdırma penceresi açılamadı. Tarayıcının açılır pencere iznini etkinleştirin."); return; }
+  popup.document.write(`<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>FERAH AUTO - Servis Kabul Formu</title><style>
+  *{box-sizing:border-box}body{font-family:Arial,sans-serif;color:#171717;margin:0;padding:34px}.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #a9823b;padding-bottom:18px}.brand{font-size:24px;font-weight:800;letter-spacing:3px}.sub{font-size:11px;color:#666;margin-top:6px;letter-spacing:2px}.date{text-align:right;font-size:12px;color:#555}.title{font-size:20px;font-weight:700;margin:24px 0 16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{border:1px solid #ddd;border-radius:8px;padding:12px;min-height:58px}.label{font-size:10px;color:#777;text-transform:uppercase;letter-spacing:1px;margin-bottom:7px}.value{font-size:14px;font-weight:600;white-space:pre-wrap}.wide{grid-column:1/-1}.prices{width:100%;border-collapse:collapse;margin-top:20px}.prices td{padding:12px;border-bottom:1px solid #ddd;font-size:13px}.prices td:last-child{text-align:right;font-weight:700}.total td{font-size:17px;font-weight:800;border-top:2px solid #222}.bottom{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:28px;padding-top:18px;border-top:1px solid #ddd}.qr{width:145px;text-align:center;font-size:10px;color:#555}.qr img{width:125px;height:125px;display:block;margin:0 auto 7px}.sign{flex:1;display:flex;gap:28px}.sign div{flex:1;border-top:1px solid #999;padding-top:8px;margin-top:62px;font-size:10px;color:#666}.foot{margin-top:25px;text-align:center;font-size:10px;color:#777}@media print{body{padding:12mm}@page{size:A4;margin:10mm}}</style></head><body>
+  <div class="top"><div><div class="brand">FERAH AUTO</div><div class="sub">SERVİS KABUL / İŞ EMRİ FORMU</div></div><div class="date">Form tarihi<br><b>${new Date().toLocaleString("tr-TR")}</b><br><br>İş emri: <b>${escapePrintHtml(job.id.slice(0,8).toUpperCase())}</b></div></div>
+  <div class="title">Müşteri ve araç bilgileri</div><div class="grid">
+  <div class="field"><div class="label">Müşteri</div><div class="value">${escapePrintHtml(vehicle.owner_name)}</div></div>
+  <div class="field"><div class="label">Telefon</div><div class="value">${escapePrintHtml(vehicle.contact_phone)}</div></div>
+  <div class="field"><div class="label">Plaka</div><div class="value">${escapePrintHtml(plate)}</div></div>
+  <div class="field"><div class="label">Araç</div><div class="value">${escapePrintHtml(vehicle.make+" "+vehicle.model)}</div></div>
+  <div class="field wide"><div class="label">Müşteri arıza / şikâyet beyanı</div><div class="value">${escapePrintHtml(vehicle.complaint)}</div></div>
+  <div class="field wide"><div class="label">Teknik arıza tespiti</div><div class="value">${escapePrintHtml(job.diagnosis||job.mechanic_report||"Henüz girilmedi")}</div></div>
+  <div class="field wide"><div class="label">Yapılacak işlem / açıklama</div><div class="value">${escapePrintHtml(job.manager_quote_notes||job.required_parts||job.title)}</div></div></div>
+  <table class="prices"><tr><td>Parça / masraf tutarı</td><td>${parts.toLocaleString("tr-TR",{style:"currency",currency:"TRY"})}</td></tr><tr><td>İşçilik tutarı</td><td>${labor.toLocaleString("tr-TR",{style:"currency",currency:"TRY"})}</td></tr><tr class="total"><td>GENEL TOPLAM</td><td>${total.toLocaleString("tr-TR",{style:"currency",currency:"TRY"})}</td></tr></table>
+  <div class="bottom"><div class="qr"><img src="${qrUrl}" alt="Araç servis takip QR kodu">Araç servis durumunu QR kod ile görüntüleyin<br>${escapePrintHtml(plate)}</div><div class="sign"><div>Müşteri imza</div><div>FERAH AUTO yetkili</div></div></div><div class="foot">Bu form servis kabul ve fiyat bilgilendirme amacıyla hazırlanmıştır. Nihai işlem tutarı onaylanan iş emrine göre belirlenir.</div>
+  <script>window.onload=()=>{const img=document.querySelector("img");if(img.complete)window.print();else img.onload=()=>window.print();};<\/script></body></html>`);
+  popup.document.close();
+}
+
 
 export default function DashboardPage() {
   const router = useRouter();
