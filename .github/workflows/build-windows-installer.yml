@@ -7,7 +7,6 @@ on:
       - "src/**"
       - "public/**"
       - "package.json"
-      - "package-lock.json"
       - "next.config.mjs"
       - "windows/**"
       - "local-server/**"
@@ -26,7 +25,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22.23.5
-          cache: npm
       - name: Install Inno Setup 6
         shell: pwsh
         run: choco install innosetup --yes --no-progress
