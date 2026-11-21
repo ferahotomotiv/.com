@@ -503,7 +503,7 @@ export default function DashboardPage() {
     if(!isManager) { setNotice("Bu işlem için yönetici veya supervisor yetkisi gerekiyor."); return; }
     if(procurementAction) {
       if(!isManager) { setNotice("Tedarik ve montaj görevlendirmesi yalnızca yönetim yetkisindedir."); return; }
-      if(job.customer_quote_status!=="approved") { setNotice("Önce müşteri fiyat teklifi onaylanmalıdır."); return; }
+      if(procurementAction!=="update_item"&&job.customer_quote_status!=="approved") { setNotice("Önce müşteri fiyat teklifi onaylanmalıdır."); return; }
       if(procurementAction==="save_items") {
         let items:any[]=[];
         try { items=JSON.parse(String(f.get("procurement_items")||"[]")); } catch { setNotice("Ürün listesi okunamadı. Lütfen ürünleri yeniden kontrol edin."); return; }
