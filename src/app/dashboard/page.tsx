@@ -408,7 +408,7 @@ export default function DashboardPage() {
       return;
     }
     if(!isManager) { setNotice("Bu işlem için yönetici veya supervisor yetkisi gerekiyor."); return; }
-    const quoteAction=String(f.get("quote_action")||"");\n    f.set("quote_action","");
+    const quoteAction=String(f.get("quote_action")||"");
     if(quoteAction) {
       if(quoteAction==="send_quote") {
         const parts=Number(f.get("manager_parts_cost")||0);
