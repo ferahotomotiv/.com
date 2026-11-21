@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const [showTaskForm,setShowTaskForm] = useState(false);
   const [showExpenseForm,setShowExpenseForm] = useState(false);
   const [editingEntry,setEditingEntry] = useState<Entry|null>(null);
+  const [editingCustomer,setEditingCustomer] = useState<Customer|null>(null);
   const [financeType,setFinanceType] = useState("all");
   const [financeSearch,setFinanceSearch] = useState("");
   const [financeFrom,setFinanceFrom] = useState("");
@@ -569,14 +570,45 @@ export default function DashboardPage() {
     setSaving(false);
   }
 
-  async function deleteAdminRecord(type:"vehicle"|"financial_entry", id:string, label:string) {
+  async function saveCustomer(event:React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if(!supabase || !user || profile?.role!=="admin" || !editingCustomer) {
+      setNotice("Müşteri bilgilerini yalnızca Merkez Yönetici düzenleyebilir.");
+      return;
+    }
+    setSaving(true); setNotice("");
+    const form = new FormData(event.currentTarget);
+    const {data:{session}} = await supabase.auth.getSession();
+    if(!session?.access_token) { setNotice("Oturum doğrulanamadı. Lütfen yeniden giriş yapın."); setSaving(false); return; }
+    const response = await fetch("/api/admin/records", {
+      method:"PATCH",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token},
+      body:JSON.stringify({
+        id:editingCustomer.id,
+        full_name:String(form.get("full_name")||""),
+        phone:String(form.get("phone")||""),
+        email:String(form.get("email")||""),
+        notes:String(form.get("notes")||"")
+      })
+    });
+    const result = await response.json();
+    if(!response.ok) setNotice(result.error||"Müşteri bilgileri güncellenemedi.");
+    else {
+      setNotice(result.warning||"Müşteri bilgileri ve bağlı araçlardaki iletişim bilgileri güncellendi.");
+      setEditingCustomer(null);
+      await loadData();
+    }
+    setSaving(false);
+  }
+
+  async function deleteAdminRecord(type:"vehicle"|"financial_entry"|"customer", id:string, label:string) {
     if(!supabase || !user || profile?.role!=="admin") {
       setNotice("Kalıcı silme işlemi yalnızca Merkez Yönetici hesabına açıktır.");
       return;
     }
     const description = type==="vehicle"
       ? label+" plakalı araç ve bağlı servis geçmişi"
-      : "“"+label+"” finans kaydı";
+      : type==="customer" ? label+" müşteri kaydı (araç ve servis geçmişi korunacak)" : "“"+label+"” finans kaydı";
     if(!window.confirm(description+" kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?")) return;
     const {data:{session}} = await supabase.auth.getSession();
     if(!session?.access_token) { setNotice("Oturum doğrulanamadı. Lütfen yeniden giriş yapın."); return; }
@@ -587,7 +619,7 @@ export default function DashboardPage() {
     });
     const result = await response.json();
     if(!response.ok) { setNotice(result.error||"Kayıt silinemedi."); return; }
-    setNotice(type==="vehicle"?(result.deletedCustomer?"Araç, bağlı servis kayıtları ve başka aracı kalmayan müşteri kaydı kalıcı olarak silindi.":result.warning||"Araç ve bağlı servis kayıtları kalıcı olarak silindi. Müşterinin başka aracı varsa müşteri kaydı korundu."):"Finans kaydı kalıcı olarak silindi.");
+    setNotice(type==="vehicle"?(result.deletedCustomer?"Araç, bağlı servis kayıtları ve başka aracı kalmayan müşteri kaydı kalıcı olarak silindi.":result.warning||"Araç ve bağlı servis kayıtları kalıcı olarak silindi. Müşterinin başka aracı varsa müşteri kaydı korundu."):type==="customer"?"Müşteri kaydı kalıcı olarak silindi. Araçlar ve servis geçmişleri korundu.":"Finans kaydı kalıcı olarak silindi.");
     await loadData();
   }
 
@@ -727,7 +759,8 @@ export default function DashboardPage() {
             <PageHeading eyebrow="MÜŞTERİ YÖNETİMİ / 03" title="Müşteri kayıtları" subtitle="Müşteri iletişim bilgileri, sorgu kodları ve müşteriye bağlı tüm araçlar."/>
             <div className="mb-4 flex items-center gap-3 rounded-xl border border-[#292e36] bg-[#101216] px-3"><Search size={16} className="text-[#737b87]"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Müşteri adı, telefon, plaka veya araç ara…" className="w-full border-0 !bg-transparent py-3 text-xs !shadow-none !ring-0"/></div>
             <div className="space-y-3">{customers.filter(customer=>{const q=search.toLocaleLowerCase("tr-TR");const linked=vehicles.filter(v=>v.customer_id===customer.id);return !q||customer.full_name.toLocaleLowerCase("tr-TR").includes(q)||customer.phone.includes(q)||linked.some(v=>(v.plate+" "+v.make+" "+v.model).toLocaleLowerCase("tr-TR").includes(q));}).map(customer=>{const linked=vehicles.filter(v=>v.customer_id===customer.id);return <section key={customer.id} className="card overflow-hidden">
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 p-5"><div><div className="text-sm font-semibold">{customer.full_name}</div><div className="mt-1 text-xs text-[#9ba4b1]">{customer.phone}</div>{customer.email&&<div className="mt-1 text-[10px] text-[#77818e]">{customer.email}</div>}</div><span className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] text-[#b8c0cb]">{linked.length} kayıtlı araç</span></div>
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 p-5"><div><div className="text-sm font-semibold">{customer.full_name}</div><div className="mt-1 text-xs text-[#9ba4b1]">{customer.phone}</div>{customer.email&&<div className="mt-1 text-[10px] text-[#77818e]">{customer.email}</div>}</div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] text-[#b8c0cb]">{linked.length} kayıtlı araç</span>{profile?.role==="admin"&&<><button onClick={()=>setEditingCustomer(customer)} className="rounded-lg border border-white/15 px-3 py-2 text-[10px] text-white hover:bg-white/10">Bilgileri düzenle</button><button onClick={()=>void deleteAdminRecord("customer",customer.id,customer.full_name)} className="rounded-lg border border-red-500/30 px-3 py-2 text-[10px] text-red-300 hover:bg-red-500/10">Kalıcı sil</button></>}</div></div>
+              {editingCustomer?.id===customer.id&&<form onSubmit={saveCustomer} className="grid gap-3 border-b border-white/8 bg-white/[.025] p-5 md:grid-cols-2"><Field label="Ad soyad"><input name="full_name" required minLength={2} defaultValue={customer.full_name} className="w-full px-3 py-2.5 text-xs"/></Field><Field label="Telefon"><input name="phone" required defaultValue={customer.phone} className="w-full px-3 py-2.5 text-xs"/></Field><Field label="E-posta"><input name="email" type="email" defaultValue={customer.email||""} className="w-full px-3 py-2.5 text-xs"/></Field><Field label="Yönetim notu"><input name="notes" defaultValue={customer.notes||""} className="w-full px-3 py-2.5 text-xs"/></Field><div className="flex gap-2 md:col-span-2"><button disabled={saving} type="submit" className="rounded-lg bg-white px-4 py-2.5 text-xs font-semibold text-black disabled:opacity-50">{saving?"Kaydediliyor…":"Değişiklikleri kaydet"}</button><button type="button" onClick={()=>setEditingCustomer(null)} className="rounded-lg border border-white/15 px-4 py-2.5 text-xs">Vazgeç</button></div></form>}
               <div className="divide-y divide-white/5">{linked.map(vehicle=>{const code=customerAccessCodes.find(item=>item.vehicle_id===vehicle.id);return <div key={vehicle.id} className="grid gap-2 px-5 py-4 md:grid-cols-[1.2fr_1fr_1fr] md:items-center"><div><div className="text-xs font-medium">{vehicle.make} {vehicle.model}</div><div className="mt-1 text-[10px] tracking-wider text-[#8f99a6]">{vehicle.plate}</div><div className="mt-1 text-[10px] text-[#7c8794]">{dateTime(vehicle.received_at)}</div></div><div><div className="eyebrow">MÜŞTERİ SORGULAMA KODU</div><div className="mt-1 flex items-center gap-2"><code className="text-xs tracking-wider text-[#e1c58b]">{code?.access_code||"Eski kayıt · kod arşivlenmemiş"}</code>{code&&<button onClick={()=>void navigator.clipboard.writeText(code.access_code)} className="rounded-md border border-white/10 p-1.5 text-[#aeb7c4]" title="Kodu kopyala"><Copy size={12}/></button>}</div></div><div className="text-xs"><StatusPill status={vehicle.status}/></div></div>;})}
               {linked.length===0&&<div className="px-5 py-4 text-xs text-[#818b98]">Henüz araç kaydı bağlanmamış.</div>}</div>
             </section>;})}
