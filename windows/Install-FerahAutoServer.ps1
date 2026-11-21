@@ -15,6 +15,7 @@ if ($major -lt 20 -or $major -ge 23) { throw "Node.js 20.x or 22.x is required."
 
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
 Copy-Item -Path (Join-Path $Source "*") -Destination $Root -Recurse -Force
+Copy-Item -Path (Join-Path $PSScriptRoot "Start-FerahAutoServer.ps1") -Destination (Join-Path $Root "Start-FerahAutoServer.ps1") -Force
 Push-Location $Root
 try {
   if (-not (Test-Path ".env")) {
