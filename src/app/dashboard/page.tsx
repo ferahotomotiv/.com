@@ -125,7 +125,8 @@ export default function DashboardPage() {
     const allPaths=[...new Set([...photos.map(p=>p.storage_path),...(vehicleRes.data||[]).flatMap((v:any)=>[v.photo_path,v.showroom_model_path]).filter(Boolean)])];
     const signedPhotos=await Promise.all(allPaths.map(async(path:string)=>{const {data}=await supabase.storage.from("vehicle-media").createSignedUrl(path,3600);return data?.signedUrl?[path,data.signedUrl] as const:null;}));
     setVehiclePhotoUrls(Object.fromEntries(signedPhotos.filter(Boolean) as [string,string][]));
-    setJobs((jobRes.data||[]) as Job[]);\n    setInventoryProducts((inventoryRes.data||[]) as InventoryProduct[]);
+    setJobs((jobRes.data||[]) as Job[]);
+    setInventoryProducts((inventoryRes.data||[]) as InventoryProduct[]);
     setVehicleEvents((eventRes.data||[]) as VehicleEvent[]);
     setStaff((staffRes.data||[]) as Profile[]);
 
