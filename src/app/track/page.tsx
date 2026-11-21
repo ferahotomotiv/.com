@@ -7,7 +7,9 @@ import { createClient } from "@/lib/supabase/client";
 type Result = {
   plate: string; make: string; model: string; status: string;
   estimated_completion: string | null; received_at: string;
-  assigned_staff_name?: string | null;\n  parts_supplier?: string | null;\n  parts_expected_at?: string | null;
+  assigned_staff_name?: string | null;
+  parts_supplier?: string | null;
+  parts_expected_at?: string | null;
   events: { title: string; details: string | null; status: string | null; created_at: string }[];
 };
 
