@@ -10,7 +10,8 @@ type Result = {
   assigned_staff_name?: string | null;
   parts_supplier?: string | null;
   parts_expected_at?: string | null;
-  events: { title: string; details: string | null; status: string | null; created_at: string }[];
+  delivered_at?: string | null; delivered_by_name?: string | null; delivered_by_role?: string | null;
+  events: { title: string; details: string | null; status: string | null; created_at: string; actor_name?: string | null }[];
 };
 
 const statusLabels: Record<string,string> = {
@@ -46,6 +47,8 @@ export default function TrackPage() {
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState("");
 
+  function resetSearch() { setResult(null); setError(""); setPlate(""); setCode(""); window.scrollTo({top:0,behavior:"smooth"}); }
+
   async function search(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setResult(null);
     if (!supabase) { setError("Sorgulama servisi şu anda yapılandırılmamış."); setBusy(false); return; }
@@ -70,18 +73,18 @@ export default function TrackPage() {
         <h1 className="mt-6 text-3xl font-semibold tracking-tight">Aracınızın servis durumunu öğrenin.</h1>
         <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[#8b929d]">Plakanız ve servis kabulünde size verilen özel erişim koduyla güncel işlem bilgilerine ulaşabilirsiniz.</p>
       </div>
-      <section className="card p-6 sm:p-8">
+      {!result && <section className="card p-6 sm:p-8">
         <form onSubmit={search} className="space-y-4">
           <label className="block"><span className="mb-2 block text-xs text-[#b9bec6]">Araç plakası</span><input required value={plate} onChange={e=>setPlate(e.target.value.toLocaleUpperCase("tr-TR"))} placeholder="Örn. 34 ABC 123" className="w-full px-4 py-3 text-sm uppercase tracking-wider"/></label>
           <label className="block"><span className="mb-2 block text-xs text-[#b9bec6]">Müşteri erişim kodu</span><span className="relative block"><KeyRound size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#737b87]"/><input required minLength={8} value={code} onChange={e=>setCode(e.target.value)} placeholder="Size verilen özel kod" className="w-full py-3 pl-11 pr-4 text-sm"/></span></label>
           {error && <p className="text-xs text-red-300">{error}</p>}
           <button disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3.5 text-sm font-semibold text-black hover:bg-[#e1e4e8] disabled:opacity-50"><Search size={16}/>{busy?"Araç aranıyor…":"Araç durumunu sorgula"}</button>
         </form>
-      </section>
+      </section>}
       {result && <section className="card mt-5 p-6 sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-5">
           <div><div className="eyebrow">ARAÇ SERVİS KAYDI</div><h2 className="mt-2 text-xl font-semibold">{result.make} {result.model}</h2><p className="mt-1 text-xs tracking-widest text-[#aeb4be]">{result.plate}</p></div>
-          <div className={`rounded-full border px-3 py-2 text-xs ${completion?"border-emerald-500/30 bg-emerald-500/10 text-emerald-200":closed?"border-red-500/30 bg-red-500/10 text-red-200":"border-white/15 bg-white/5"}`}>{statusLabels[result.status] || result.status}</div>
+          <div className="flex items-center gap-2"><div className={`rounded-full border px-3 py-2 text-xs ${completion?"border-emerald-500/30 bg-emerald-500/10 text-emerald-200":closed?"border-red-500/30 bg-red-500/10 text-red-200":"border-white/15 bg-white/5"}`}>{statusLabels[result.status] || result.status}</div><button type="button" onClick={resetSearch} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-[#c5cbd4] hover:bg-white/5">Yeni sorgulama</button></div>
         </div>
 
         <div className="mt-6 rounded-xl border border-white/8 bg-[#0d1014] p-4 sm:p-5">
@@ -91,13 +94,14 @@ export default function TrackPage() {
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="flex items-start gap-3 rounded-xl border border-white/8 bg-white/[.03] p-4"><CalendarDays size={17} className="mt-0.5 text-[#aeb7c4]"/><div><div className="eyebrow">ARAÇ KABUL TARİHİ</div><div className="mt-1 text-sm">{dateText(result.received_at)}</div></div></div>
-          <div className="flex items-start gap-3 rounded-xl border border-white/8 bg-white/[.03] p-4"><Clock3 size={17} className="mt-0.5 text-[#aeb7c4]"/><div><div className="eyebrow">TAHMİNİ TESLİM</div><div className="mt-1 text-sm">{result.estimated_completion?dateText(result.estimated_completion):"Henüz belirlenmedi"}</div></div></div>
-          <div className="flex items-start gap-3 rounded-xl border border-white/8 bg-white/[.03] p-4 sm:col-span-2"><UserRound size={17} className="mt-0.5 text-[#aeb7c4]"/><div><div className="eyebrow">SORUMLU SERVİS PERSONELİ</div><div className="mt-1 text-sm">{result.assigned_staff_name||"Henüz atanmadı"}</div></div></div>
+          <div className="flex items-start gap-3 rounded-xl border border-white/8 bg-white/[.03] p-4"><Clock3 size={17} className="mt-0.5 text-[#aeb7c4]"/><div><div className="eyebrow">{completion?"GERÇEK TESLİM TARİHİ":"TAHMİNİ TESLİM"}</div><div className="mt-1 text-sm">{completion?(result.delivered_at?dateText(result.delivered_at):"Teslim kaydı mevcut"):(result.estimated_completion?dateText(result.estimated_completion):"Henüz belirlenmedi")}</div></div></div>
+          <div className="flex items-start gap-3 rounded-xl border border-white/8 bg-white/[.03] p-4"><UserRound size={17} className="mt-0.5 text-[#aeb7c4]"/><div><div className="eyebrow">SON SERVİS SORUMLUSU</div><div className="mt-1 text-sm">{result.assigned_staff_name||"Henüz atanmadı"}</div><div className="mt-1 text-[10px] text-[#818b98]">Onarım sürecindeki sorumlu personel</div></div></div>
+          {completion&&<div className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[.05] p-4"><ShieldCheck size={17} className="mt-0.5 text-emerald-300"/><div><div className="eyebrow text-emerald-200">TESLİMATI GERÇEKLEŞTİREN</div><div className="mt-1 text-sm">{result.delivered_by_name||"Teslimat personeli kaydedilmemiş"}</div><div className="mt-1 text-[10px] text-[#8caa9f]">{result.delivered_by_role==="supervisor"?"Supervisor":(["admin","manager"].includes(result.delivered_by_role||"")?"Yönetici":"FERAH AUTO")}</div></div></div>}
         </div>
 
         {result.status==="waiting_parts"&&<div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[.05] p-4"><div className="eyebrow text-amber-200">PARÇA TEDARİK BİLGİSİ</div><div className="mt-2 text-sm">{result.parts_supplier==="customer"?"Parçayı müşteri temin edecek":result.parts_supplier==="business"?"Parçayı FERAH AUTO temin edecek":"Tedarik sorumlusu henüz belirlenmedi"}</div><div className="mt-1 text-xs text-[#a5adb8]">Tahmini parça geliş zamanı: {result.parts_expected_at?dateText(result.parts_expected_at):"Henüz belirlenmedi"}</div></div>}
 
-        <div className="mt-7"><div className="eyebrow mb-4 flex items-center gap-2"><Wrench size={13}/> SERVİS İŞLEM GEÇMİŞİ</div>{result.events.length===0?<p className="text-sm text-[#828a96]">Henüz müşteriye açık bir güncelleme paylaşılmadı.</p>:<div className="relative space-y-5 before:absolute before:bottom-2 before:left-[5px] before:top-2 before:w-px before:bg-white/10">{result.events.map((event,i)=><div key={i} className="relative flex gap-4"><div className="z-10 mt-1.5 h-3 w-3 shrink-0 rounded-full border-2 border-[#090a0c] bg-emerald-400"/><div className="min-w-0"><div className="text-sm font-medium">{event.title}</div>{event.details&&<p className="mt-1 text-xs leading-5 text-[#969eaa]">{event.details}</p>}<div className="mt-1 text-[10px] text-[#656d79]">{dateText(event.created_at)}</div></div></div>)}</div>}</div>
+        <div className="mt-7"><div className="eyebrow mb-4 flex items-center gap-2"><Wrench size={13}/> SERVİS İŞLEM GEÇMİŞİ</div>{result.events.length===0?<p className="text-sm text-[#828a96]">Henüz müşteriye açık bir güncelleme paylaşılmadı.</p>:<div className="relative space-y-5 before:absolute before:bottom-2 before:left-[5px] before:top-2 before:w-px before:bg-white/10">{result.events.map((event,i)=><div key={i} className="relative flex gap-4"><div className="z-10 mt-1.5 h-3 w-3 shrink-0 rounded-full border-2 border-[#090a0c] bg-emerald-400"/><div className="min-w-0"><div className="text-sm font-medium">{event.title}</div>{event.details&&<p className="mt-1 text-xs leading-5 text-[#969eaa]">{event.details}</p>}{event.actor_name&&<p className="mt-1 text-[10px] text-[#aeb7c4]">İşlemi yapan: {event.actor_name}</p>}<div className="mt-1 text-[10px] text-[#656d79]">{dateText(event.created_at)}</div></div></div>)}</div>}</div>
         <div className="mt-7 flex items-center gap-2 border-t border-white/10 pt-4 text-[10px] text-[#737b87]"><ShieldCheck size={13}/> Bu ekranda yalnızca müşteriye açık servis bilgileri gösterilir. İç personel notları ve finansal bilgiler gizlidir.</div>
       </section>}
       <p className="mt-8 text-center text-[10px] tracking-widest text-[#535a64]">FERAH OTOMOTİV · SERVICE CARE</p>
