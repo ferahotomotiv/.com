@@ -5,7 +5,7 @@ $RuntimeDir = Join-Path $WindowsDir "runtime"
 $ReleaseDir = Join-Path $RepoRoot "release"
 $NodeVersion = "v22.23.5"
 $Zip = Join-Path $env:TEMP "ferah-auto-node-$NodeVersion-win-x64.zip"
-$Extract = Join-Path $env:TEMP "ferah-auto-node-$NodeVersion-win-x64"
+$Extract = Join-Path $env:TEMP "node-$NodeVersion-win-x64"
 
 New-Item -ItemType Directory -Force -Path $RuntimeDir,$ReleaseDir | Out-Null
 if (-not (Test-Path (Join-Path $RuntimeDir "node.exe"))) {
