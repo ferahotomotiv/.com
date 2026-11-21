@@ -5,7 +5,7 @@ import { ArrowLeft, CarFront, Clock3, KeyRound, Search, ShieldCheck, Wrench, Cal
 import { createClient } from "@/lib/supabase/client";
 
 type Result = {
-  plate: string; make: string; model: string; status: string;
+  plate: string; make: string; model: string; status: string; photo_path?: string | null; photo_paths?: string[];
   estimated_completion: string | null; received_at: string;
   assigned_staff_name?: string | null;
   parts_supplier?: string | null;
@@ -44,10 +44,11 @@ export default function TrackPage() {
   const [plate,setPlate] = useState("");
   const [code,setCode] = useState("");
   const [result,setResult] = useState<Result|null>(null);
+  const [vehiclePhotos,setVehiclePhotos] = useState<string[]>([]);
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState("");
 
-  function resetSearch() { setResult(null); setError(""); setPlate(""); setCode(""); window.scrollTo({top:0,behavior:"smooth"}); }
+  function resetSearch() { setResult(null); setVehiclePhotos([]); setError(""); setPlate(""); setCode(""); window.scrollTo({top:0,behavior:"smooth"}); }
 
   async function search(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setResult(null);
@@ -56,6 +57,10 @@ export default function TrackPage() {
     setBusy(false);
     if (rpcError || !data) { setError("Kayıt bulunamadı. Plaka ve size iletilen erişim kodunu kontrol edin."); return; }
     setResult(data as Result);
+    try {
+      const response = await fetch("/api/customer-vehicle-photos", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({plate,accessCode:code}) });
+      if(response.ok){const payload=await response.json();setVehiclePhotos((payload.photos||[]).map((photo:{url:string})=>photo.url));}
+    } catch { /* Keep the service status visible if photo delivery is temporarily unavailable. */ }
   }
 
   const currentIndex = result ? stageIndex[result.status] ?? -1 : -1;
@@ -87,6 +92,10 @@ export default function TrackPage() {
           <div className="flex items-center gap-2"><div className={`rounded-full border px-3 py-2 text-xs ${completion?"border-emerald-500/30 bg-emerald-500/10 text-emerald-200":closed?"border-red-500/30 bg-red-500/10 text-red-200":"border-white/15 bg-white/5"}`}>{statusLabels[result.status] || result.status}</div><button type="button" onClick={resetSearch} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-[#c5cbd4] hover:bg-white/5">Yeni sorgulama</button></div>
         </div>
 
+        {vehiclePhotos.length>0&&<div className="mt-6">
+          <div className="mb-3 flex items-center justify-between"><div><div className="eyebrow">ARACINIZIN GÖRSELLERİ</div><p className="mt-1 text-xs text-[#8993a0]">Servis kabulünde eklenen araç fotoğrafları</p></div><span className="rounded-full border border-white/10 px-2.5 py-1 text-[10px] text-[#aeb7c4]">{vehiclePhotos.length} fotoğraf</span></div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{vehiclePhotos.map((url,index)=><a key={url} href={url} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-white/10 bg-[#0d1014]"><img src={url} alt={"Araç fotoğrafı "+(index+1)} loading="lazy" className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"/><div className="px-3 py-2 text-[10px] text-[#9ba4b1]">Fotoğraf {index+1} · Büyük görüntüle</div></a>)}</div>
+        </div>}
         <div className="mt-6 rounded-xl border border-white/8 bg-[#0d1014] p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3"><div><div className="eyebrow">SERVİS İLERLEMESİ</div><div className="mt-1 text-sm font-semibold">{closed?"Servis işlemi iptal edildi":completion?"Servis süreci tamamlandı":statusLabels[result.status]||"Servis devam ediyor"}</div></div><div className="text-sm font-semibold tabular-nums text-[#d8dde5]">{closed?"—":progress+"%"}</div></div>
           {!closed&&<><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{width:progress+"%"}}/></div><div className="mt-5 grid grid-cols-4 gap-x-2 gap-y-4 sm:grid-cols-7">{stages.map((stage,index)=>{const done=index<=currentIndex;return <div key={stage.key} className="flex flex-col items-center gap-2 text-center"><div className={`grid h-7 w-7 place-items-center rounded-full border ${done?"border-emerald-400/50 bg-emerald-500/15 text-emerald-300":"border-white/15 text-[#626b78]"}`}>{done?<CheckCircle2 size={15}/>:<Circle size={14}/>}</div><span className={`text-[9px] leading-4 sm:text-[10px] ${done?"text-[#d5dbe3]":"text-[#69727e]"}`}>{stage.label}</span></div>})}</div></>}
