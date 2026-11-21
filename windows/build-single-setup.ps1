@@ -26,7 +26,7 @@ $oldPath = $env:PATH
 $env:PATH = "$RuntimeDir;$oldPath"
 Push-Location $RepoRoot
 try {
-  & $npm ci
+  & $npm install --no-audit --no-fund
   if ($LASTEXITCODE -ne 0) { throw "Frontend dependency installation failed." }
   & $npm run build
   if ($LASTEXITCODE -ne 0) { throw "Next.js production build failed." }
