@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { createElement, useMemo, useState } from "react";
 import { ArrowLeft, CarFront, Clock3, KeyRound, Search, ShieldCheck, Wrench, CalendarDays, UserRound, CheckCircle2, Circle, MessageCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -59,10 +59,11 @@ export default function TrackPage() {
   const [code,setCode] = useState("");
   const [result,setResult] = useState<Result|null>(null);
   const [vehiclePhotos,setVehiclePhotos] = useState<string[]>([]);
+  const [showroomModel,setShowroomModel] = useState<string|null>(null);
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState("");
 
-  function resetSearch() { setResult(null); setVehiclePhotos([]); setError(""); setPlate(""); setCode(""); window.scrollTo({top:0,behavior:"smooth"}); }
+  function resetSearch() { setResult(null); setVehiclePhotos([]); setShowroomModel(null); setError(""); setPlate(""); setCode(""); window.scrollTo({top:0,behavior:"smooth"}); }
 
   async function search(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setResult(null);
@@ -73,7 +74,7 @@ export default function TrackPage() {
     setResult(data as Result);
     try {
       const response = await fetch("/api/customer-vehicle-photos", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({plate,accessCode:code}) });
-      if(response.ok){const payload=await response.json();setVehiclePhotos((payload.photos||[]).map((photo:{url:string})=>photo.url));}
+      if(response.ok){const payload=await response.json();setVehiclePhotos((payload.photos||[]).map((photo:{url:string})=>photo.url));setShowroomModel(payload.showroomModel||null);}
     } catch { /* Keep the service status visible if photo delivery is temporarily unavailable. */ }
   }
 
@@ -105,6 +106,12 @@ export default function TrackPage() {
           <div><div className="eyebrow">ARAÇ SERVİS KAYDI</div><h2 className="mt-2 text-xl font-semibold">{result.make} {result.model}</h2><p className="mt-1 text-xs tracking-widest text-[#aeb4be]">{result.plate}</p></div>
           <div className="flex items-center gap-2"><div className={`rounded-full border px-3 py-2 text-xs ${statusTone[result.status]||"border-white/15 bg-white/5 text-[#d8dde5]"}`}>{statusLabels[result.status] || result.status}</div><button type="button" onClick={resetSearch} className="rounded-lg border border-white/15 px-3 py-2 text-xs text-[#c5cbd4] hover:bg-white/5">Yeni sorgulama</button></div>
         </div>
+
+        {(showroomModel||vehiclePhotos.length>0)&&<div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(ellipse_at_50%_35%,rgba(91,103,119,.22),rgba(12,15,19,.96)_70%)] p-3 sm:p-5">
+          <div className="mb-3 flex items-center justify-between gap-3"><div><div className="eyebrow">FERAH AUTO DIGITAL SHOWROOM</div><p className="mt-1 text-xs text-[#9ba5b2]">{showroomModel?"Aracınızın etkileşimli 3D modeli":"Servis kabulünde yüklenen araç görseli"}</p></div><span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[9px] text-emerald-200">{showroomModel?"3D MODEL":"SHOWROOM GÖRÜNÜMÜ"}</span></div>
+          {showroomModel?createElement("model-viewer" as any,{src:showroomModel,alt:result.make+" "+result.model+" "+result.plate+" 3D modeli","camera-controls":true,"auto-rotate":true,"rotation-per-second":"10deg","shadow-intensity":"1",exposure:"1",style:{width:"100%",height:"300px",background:"transparent"}}):vehiclePhotos[0]&&<div className="relative overflow-hidden rounded-xl border border-white/10 bg-black/25"><img src={vehiclePhotos[0]} alt={result.make+" "+result.model+" araç görseli"} className="h-56 w-full object-contain p-3 sm:h-72"/><div className="absolute bottom-3 left-3 rounded-lg border border-white/10 bg-black/60 px-3 py-2 text-[10px] text-[#d5dbe3] backdrop-blur">3D model hazırlanmadı · Orijinal araç fotoğrafı</div></div>}
+          {showroomModel&&<p className="mt-2 text-center text-[10px] text-[#87919e]">Aracı döndürmek için sürükleyin, yakınlaştırmak için kaydırın.</p>}
+        </div>}
 
         {vehiclePhotos.length>0&&<div className="mt-6">
           <div className="mb-3 flex items-center justify-between"><div><div className="eyebrow">ARACINIZIN GÖRSELLERİ</div><p className="mt-1 text-xs text-[#8993a0]">Servis kabulünde eklenen araç fotoğrafları</p></div><span className="rounded-full border border-white/10 px-2.5 py-1 text-[10px] text-[#aeb7c4]">{vehiclePhotos.length} fotoğraf</span></div>
