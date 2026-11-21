@@ -18,7 +18,11 @@ Copy-Item -Path (Join-Path $Source "*") -Destination $Root -Recurse -Force
 Push-Location $Root
 try {
   if (-not (Test-Path ".env")) {
-    $secret = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+    $bytes = New-Object byte[] 48
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $rng.Dispose()
+    $secret = [Convert]::ToBase64String($bytes)
     @"
 HOST=0.0.0.0
 PORT=8787
@@ -33,7 +37,12 @@ SUPABASE_SERVICE_ROLE_KEY=
   npm install --omit=dev
   if ($LASTEXITCODE -ne 0) { throw "npm install failed." }
   New-NetFirewallRule -DisplayName "FERAH AUTO Local Server TCP 8787" -Direction Inbound -Protocol TCP -LocalPort 8787 -Action Allow -Profile Private -ErrorAction SilentlyContinue | Out-Null
+  $nodePath = (Get-Command node.exe).Source
+  Set-Content -Encoding UTF8 "node-path.txt" $nodePath
+  $taskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$Root\Start-FerahAutoServer.ps1`""
+  $taskTrigger = New-ScheduledTaskTrigger -AtStartup
+  Register-ScheduledTask -TaskName "FERAH AUTO Local Server" -Action $taskAction -Trigger $taskTrigger -RunLevel Highest -User "SYSTEM" -Force | Out-Null
   Write-Host "Local server files installed to $Root"
-  Write-Host "Next: run 'node scripts/create-admin.js', then 'npm start'."
+  Write-Host "Startup task registered. Create the first admin with: node scripts/create-admin.js"
   Write-Host "Do not expose port 8787 to the public internet."
 } finally { Pop-Location }
