@@ -465,8 +465,10 @@ export default function DashboardPage() {
   async function saveJob(job:Job, form:HTMLFormElement) {
     if(!supabase || !user || !profile) return;
     const linkedVehicle = vehicles.find(v=>v.id===job.vehicle_id);
-    if(linkedVehicle && ["delivered","cancelled"].includes(linkedVehicle.status)) { setNotice("Teslim edilmiş veya iptal edilmiş aracın iş emri kapalıdır."); return; }
     const f = new FormData(form);
+    const procurementAction = String(f.get("procurement_action")||"");
+    const isHistoricalProcurementEdit = procurementAction === "update_item";
+    if(linkedVehicle && ["delivered","cancelled"].includes(linkedVehicle.status) && !isHistoricalProcurementEdit) { setNotice("Teslim edilmiş veya iptal edilmiş araçta yalnızca yetkili tedarik bilgisi düzeltmesi yapılabilir."); return; }
     const isMechanic = profile.role === "mechanic";
     const diagnosis=String(f.get("diagnosis")||"").trim();
     const requiredParts=String(f.get("required_parts")||"").trim();
@@ -499,7 +501,6 @@ export default function DashboardPage() {
       return;
     }
     if(!isManager) { setNotice("Bu işlem için yönetici veya supervisor yetkisi gerekiyor."); return; }
-    const procurementAction=String(f.get("procurement_action")||"");
     if(procurementAction) {
       if(!isManager) { setNotice("Tedarik ve montaj görevlendirmesi yalnızca yönetim yetkisindedir."); return; }
       if(job.customer_quote_status!=="approved") { setNotice("Önce müşteri fiyat teklifi onaylanmalıdır."); return; }
@@ -545,7 +546,10 @@ export default function DashboardPage() {
           p_quantity:quantity,p_unit_cost:unitCost,p_expected_at:new Date(expectedAt).toISOString()
         });
         if(error) { setNotice("Tedarik bilgileri güncellenemedi: "+error.message); return; }
-        setNotice("Tedarik kalemi güncellendi. İş emrinin toplam tedarik maliyeti yeniden hesaplandı.");
+        const previous=procurementItems.find(entry=>entry.id===itemId);
+        await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"procurement",title:"Tedarik kalemi geçmişe dönük düzenlendi",details:(previous?.product_name||"Ürün")+" → "+productName.trim()+" · "+money(Number(previous?.total_cost||0))+" → "+money(quantity*unitCost)+" · "+supplier,customer_visible:false});
+        setEditingProcurementItem(null);
+        setNotice("Tedarik kalemi geçmişe dönük güncellendi. Toplam maliyet yeniden hesaplandı ve değişiklik işlem geçmişine kaydedildi.");
         await loadData(); return;
       }
       if(procurementAction==="receive_item") {
@@ -1055,7 +1059,7 @@ function JobCard({job,vehicle,staff,inventoryProducts,procurementItems,isManager
     </div>
     <div className="mx-5 mt-5 rounded-xl border border-amber-500/30 bg-amber-500/[.07] p-4 sm:mx-6"><div className="mb-2 flex items-center gap-2 text-[10px] font-bold tracking-[.16em] text-amber-200"><span>⚠</span> MÜŞTERİNİN ARACI GETİRME ŞİKAYETİ</div><p className="whitespace-pre-wrap text-sm leading-6 text-[#f0e6d3]">{vehicle?.complaint||"Araç kabulünde müşteri şikayeti girilmemiş."}</p><p className="mt-2 text-[10px] text-amber-100/60">Bu bilgi araç kabulünde kaydedilen müşteri beyanıdır. Teknik arıza tespiti için ustanın inceleme raporunu ayrıca girin.</p></div>
     <div className="grid gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,.85fr)]">
-      <form onSubmit={e=>{e.preventDefault();if(!isClosed)void onSave(job,e.currentTarget)}} className="space-y-4"><input type="hidden" name="quote_action" value=""/><input type="hidden" name="procurement_action" value=""/><input type="hidden" name="procurement_item_id" value=""/>
+      <form onSubmit={e=>{e.preventDefault();void onSave(job,e.currentTarget)}} className="space-y-4"><input type="hidden" name="quote_action" value=""/><input type="hidden" name="procurement_action" value=""/><input type="hidden" name="procurement_item_id" value=""/>
         <div className="rounded-xl border border-emerald-400/40 bg-emerald-500/[.07] p-4"><div className="eyebrow text-emerald-300">● GÜNCEL SORUMLU PERSONEL</div><div className="mt-1 flex items-center gap-2 text-sm font-semibold text-emerald-300">{assignee?.full_name||"Sorumlu atanmamış"}</div><div className="mt-1 text-[10px] text-emerald-200/70">{assignee?.role==="supervisor"?"Supervisor":assignee?.role==="manager"?"Yönetici":assignee?.job_title||"Usta"}</div></div>
         {isClosed&&<div className="rounded-lg border border-white/10 bg-white/[.03] px-3 py-2.5 text-xs text-[#aeb5bf]">Araç kaydı kapalıdır. İş emri salt okunur.</div>}
         <div className="rounded-xl border border-white/10 bg-black/10 p-4"><div className="eyebrow">SERVİS AŞAMASI</div><div className="mt-1 text-sm font-semibold">{statusLabels[job.status]}</div>
