@@ -425,7 +425,6 @@ export default function DashboardPage() {
       if(!notes) { setNotice("Montaj ve teknik işlem tamamlanma raporunu girin."); return; }
       const {error}=await supabase.from("service_jobs").update({installation_notes:notes,installation_completed_at:new Date().toISOString(),procurement_status:"installed",status:"testing",completed_at:new Date().toISOString()}).eq("id",job.id).eq("assigned_mechanic_id",user.id);
       if(error) { setNotice("Montaj tamamlanma raporu kaydedilemedi: "+error.message); return; }
-      await supabase.from("vehicles").update({status:"testing"}).eq("id",job.vehicle_id);
       await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"stage",title:"Montaj tamamlandı · test aşamasına geçti",details:notes,status:"testing",customer_visible:true});
       setNotice("Montaj tamamlandı. Araç test aşamasına alındı."); await loadData(); return;
     }
@@ -458,7 +457,6 @@ export default function DashboardPage() {
         if(!productId||!Number.isFinite(qty)||qty<=0) { setNotice("Stok ürünü ve miktarı seçin."); return; }
         const {error}=await supabase.rpc("fulfill_service_job_from_stock",{p_job_id:job.id,p_product_id:productId,p_quantity:qty});
         if(error) { setNotice("Stoktan ürün ayrılamadı: "+error.message); return; }
-        await supabase.from("vehicles").update({status:"waiting_parts"}).eq("id",job.vehicle_id);
         const product=inventoryProducts.find(p=>p.id===productId);
         await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"procurement",title:"Mevcut stoktan ürün işleme alındı",details:(product?.name||"Stok ürünü")+" · "+qty+" "+(product?.unit||"adet")+" stoktan düşüldü.",status:"waiting_parts",customer_visible:true});
         setNotice("Ürün işletme stokundan düşüldü ve bu iş emri için ayrıldı. Şimdi montaj ustasını görevlendirebilirsiniz."); await loadData(); return;
@@ -468,7 +466,6 @@ export default function DashboardPage() {
         if(!productName||!supplier||!Number.isFinite(qty)||qty<=0||!Number.isFinite(unitCost)||unitCost<0||!expected) { setNotice("Ürün adı, tedarikçi, miktar, alış fiyatı ve tahmini teslim tarihi zorunludur."); return; }
         const {error}=await supabase.from("service_jobs").update({procurement_status:"ordered",procurement_source:"supplier",procurement_product_id:null,procurement_product_name:productName,procurement_supplier:supplier,procurement_quantity:qty,procurement_unit_cost:unitCost,procurement_total_cost:qty*unitCost,procurement_expected_at:expected?new Date(expected).toISOString():null,procurement_ordered_at:new Date().toISOString(),status:"waiting_parts"}).eq("id",job.id);
         if(error) { setNotice("Sipariş kaydedilemedi: "+error.message); return; }
-        await supabase.from("vehicles").update({status:"waiting_parts"}).eq("id",job.vehicle_id);
         await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"procurement",title:"Tedarikçiye ürün siparişi verildi",details:productName+" · "+supplier+" · "+qty+" adet · Birim alış: "+money(unitCost),status:"waiting_parts",customer_visible:true});
         setNotice("Ürün siparişi kaydedildi. Ürün geldiğinde teslim alındı olarak işaretleyin."); await loadData(); return;
       }
@@ -485,7 +482,6 @@ export default function DashboardPage() {
         if(error) { setNotice("Montaj görevi atanamadı: "+error.message); return; }
         const mechanic=staff.find(person=>person.id===mechanicId);
         await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"assignment",title:"Ürün montajı için usta görevlendirildi",details:(mechanic?.full_name||"Usta")+" montaj ve teknik işlem için görevlendirildi.",status:"repairing",customer_visible:false});
-        await supabase.from("vehicles").update({status:"repairing"}).eq("id",job.vehicle_id);
         setNotice("Montaj ustası görevlendirildi. İş emri ustanın ekranına aktarıldı."); await loadData(); return;
       }
     }
@@ -539,10 +535,6 @@ export default function DashboardPage() {
     const {error:updateError}=await supabase.from("service_jobs").update(patch).eq("id",job.id);
     if(updateError) { setNotice(updateError.message); return; }
     if(requestedStage) {
-      const vehiclePatch:Record<string,unknown>={status:nextStatus};
-      if(nextStatus==="delivered") vehiclePatch.delivered_at=new Date().toISOString();
-      const {error:vehicleError}=await supabase.from("vehicles").update(vehiclePatch).eq("id",job.vehicle_id);
-      if(vehicleError) { setNotice("İş emri güncellendi ancak araç durumu güncellenemedi: "+vehicleError.message); await loadData(); return; }
       const safeDetails=nextStatus==="waiting_parts"?"Gerekli parçanın temini planlandı.":nextStatus==="ready"?"Servis işlemleri tamamlandı; araç teslim için hazır.":nextStatus==="delivered"?"Araç müşteriye teslim edildi.":"Aracın servis aşaması güncellendi.";
       const {error:eventError}=await supabase.from("vehicle_events").insert({vehicle_id:job.vehicle_id,actor_id:user.id,event_type:"stage",title:statusLabels[nextStatus],details:safeDetails,status:nextStatus,customer_visible:true});
       setNotice(eventError?"Aşama ilerletildi ancak işlem geçmişi yazılamadı: "+eventError.message:"Servis aşaması ilerletildi; işlemi yapan personel kaydedildi.");
@@ -629,16 +621,6 @@ export default function DashboardPage() {
     const result = await response.json();
     if(!response.ok) { setNotice(result.error||"Kayıt silinemedi."); return; }
     setNotice(type==="vehicle"?(result.deletedCustomer?"Araç, bağlı servis kayıtları ve başka aracı kalmayan müşteri kaydı kalıcı olarak silindi."+ (result.warning?" "+result.warning:""):result.warning||"Araç ve bağlı servis kayıtları kalıcı olarak silindi. Müşterinin başka aracı varsa müşteri kaydı korundu."):type==="customer"?"Müşteri kaydı kalıcı olarak silindi. Araçlar ve servis geçmişleri korundu.":"Finans kaydı kalıcı olarak silindi.");
-    await loadData();
-  }
-
-  async function updateVehicleStatus(vehicle:Vehicle,next:VehicleStatus) {
-    if(!supabase || !isManager || !user) return;
-    if(vehicle.status==="delivered") { setNotice("Teslim edilmiş araç normal durum menüsünden değiştirilemez. Yeniden servis açmak için Admin veya Yönetici işlemi gerekir."); return; }
-    const {error:updateError} = await supabase.from("vehicles").update({status:next}).eq("id",vehicle.id);
-    if(updateError) { setNotice(updateError.message); return; }
-    const {error:eventError} = await supabase.from("vehicle_events").insert({vehicle_id:vehicle.id,actor_id:user.id,event_type:"status",title:statusLabels[next],status:next,details:"Araç servis durumu güncellendi.",customer_visible:true});
-    if(eventError) setNotice("Durum güncellendi ancak işlem geçmişi yazılamadı: "+eventError.message);
     await loadData();
   }
 
