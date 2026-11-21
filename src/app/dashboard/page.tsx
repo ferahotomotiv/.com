@@ -259,8 +259,9 @@ export default function DashboardPage() {
 
   async function createVehicle(event:React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!supabase || !user || !isManager) return;
+    if (!supabase || !user || !isManager) { setNotice("Bu işlem için yönetici veya supervisor yetkisi gerekiyor."); return; }
     setSaving(true); setNotice(""); setAccessCode("");
+    try {
     // Open WhatsApp synchronously from the submit gesture so popup blockers do not suppress it.
     const whatsappWindow = window.open("about:blank", "_blank");
     const form = new FormData(event.currentTarget);
@@ -273,7 +274,7 @@ export default function DashboardPage() {
     if (!selectedStaff) { if(whatsappWindow) whatsappWindow.close(); setNotice("Araç kabul sorumlusu olarak yalnızca aktif yönetici veya supervisor seçilebilir. Ustalar iş emri aşamasında atanır."); setSaving(false); return; }
     const ownerName=String(form.get("owner_name")||"").trim();
     const phone=String(form.get("contact_phone")||"").trim();
-    const normalizedPhone=phone.replace(/\\D/g,"");
+    const normalizedPhone=phone.replace(/\D/g,"");
     if(normalizedPhone.length<10){if(whatsappWindow)whatsappWindow.close();setNotice("Müşteri telefon numarasını kontrol edin.");setSaving(false);return;}
     const {data:customer,error:customerError}=await supabase.from("customers").upsert({
       full_name:ownerName,phone,normalized_phone:normalizedPhone,created_by:user.id,updated_at:new Date().toISOString()
@@ -345,6 +346,11 @@ export default function DashboardPage() {
     setShowVehicleForm(false);
     await loadData();
     setSaving(false);
+    } catch (error) {
+      if (whatsappWindow) whatsappWindow.close();
+      setNotice("Araç kaydı sırasında beklenmeyen hata: " + (error instanceof Error ? error.message : String(error)));
+      setSaving(false);
+    }
   }
 
   async function createTask(event:React.FormEvent<HTMLFormElement>) {
