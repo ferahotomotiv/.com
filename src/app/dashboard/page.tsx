@@ -393,24 +393,6 @@ export default function DashboardPage() {
     if(initial>0){const {error:stockError}=await supabase.rpc("record_inventory_stock_in",{p_product_id:data.id,p_quantity:initial,p_unit_cost:cost,p_notes:"İlk stok girişi"});if(stockError){setNotice("Ürün açıldı ancak ilk stok eklenemedi: "+stockError.message);await loadData();setSaving(false);return;}}
     setNotice("Stok ürün kartı oluşturuldu."); await loadData(); setSaving(false);
   }
-  async function addInventoryStock(event:React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if(!supabase||!user||!isManager)return; setSaving(true);
-    const f=new FormData(event.currentTarget); const productId=String(f.get("product_id")||""); const qty=Number(f.get("quantity")||0); const cost=Number(f.get("unit_cost")||0); const notes=String(f.get("notes")||"").trim();
-    const {error}=await supabase.rpc("record_inventory_stock_in",{p_product_id:productId,p_quantity:qty,p_unit_cost:cost,p_notes:notes||"Manuel stok girişi"});
-    if(error)setNotice("Stok girişi yapılamadı: "+error.message);else{setNotice("Stok miktarı güncellendi.");await loadData();event.currentTarget.reset();}
-    setSaving(false);
-  }
-
-  async function createInventoryProduct(event:React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if(!supabase||!user||!isManager)return; setSaving(true);
-    const f=new FormData(event.currentTarget); const name=String(f.get("name")||"").trim(); const sku=String(f.get("sku")||"").trim(); const unit=String(f.get("unit")||"adet"); const cost=Number(f.get("unit_cost")||0); const min=Number(f.get("min_quantity")||0);
-    if(!name||cost<0||min<0){setNotice("Ürün adı ve maliyet bilgilerini kontrol edin.");setSaving(false);return;}
-    const {data,error}=await supabase.from("inventory_products").insert({name,sku:sku||null,unit,unit_cost:cost,min_quantity:min,quantity:0,created_by:user.id}).select("id").single();
-    if(error){setNotice("Stok kartı oluşturulamadı: "+error.message);setSaving(false);return;}
-    const initial=Number(f.get("initial_quantity")||0);
-    if(initial>0){const {error:stockError}=await supabase.rpc("record_inventory_stock_in",{p_product_id:data.id,p_quantity:initial,p_unit_cost:cost,p_notes:"İlk stok girişi"});if(stockError){setNotice("Ürün açıldı ancak ilk stok eklenemedi: "+stockError.message);await loadData();setSaving(false);return;}}
-    setNotice("Stok ürün kartı oluşturuldu."); await loadData(); setSaving(false);
-  }
 
   async function addInventoryStock(event:React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if(!supabase||!user||!isManager)return; setSaving(true);
