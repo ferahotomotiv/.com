@@ -11,9 +11,10 @@ AppPublisher={#AppPublisher}
 DefaultDirName={autopf}\FERAH AUTO
 DefaultGroupName=FERAH AUTO
 OutputDir=..\release
-OutputBaseFilename=FERAH-AUTO-TEK-KURULUM
+OutputBaseFilename=FERAH-AUTO-WINDOWS-KURULUM
 ArchitecturesInstallIn64BitMode=x64
 ArchitecturesAllowed=x64
+MinVersion=6.2
 PrivilegesRequired=admin
 Compression=lzma2
 SolidCompression=yes
@@ -22,34 +23,22 @@ UninstallDisplayName=FERAH AUTO
 CloseApplications=yes
 RestartApplications=no
 
-[Dirs]
-Name: "{commonappdata}\FerahAuto\Server"; Permissions: users-modify
-Name: "{commonappdata}\FerahAuto\Server\data"; Permissions: users-modify
-Name: "{commonappdata}\FerahAuto\App"; Permissions: users-modify
-
 [Files]
-Source: "..\local-server\*"; DestDir: "{commonappdata}\FerahAuto\Server"; Flags: recursesubdirs ignoreversion
-Source: "runtime\node.exe"; DestDir: "{commonappdata}\FerahAuto\Server\runtime"; Flags: ignoreversion
-Source: "..\.next\standalone\*"; DestDir: "{commonappdata}\FerahAuto\App"; Flags: recursesubdirs ignoreversion
-Source: "..\.next\standalone\node.exe"; DestDir: "{commonappdata}\FerahAuto\App\runtime"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "Start-FerahAutoApp.ps1"; DestDir: "{commonappdata}\FerahAuto"; Flags: ignoreversion
-Source: "FirstRun.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "app\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 
 [Icons]
-Name: "{autoprograms}\FERAH AUTO"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{commonappdata}\FerahAuto\Start-FerahAutoApp.ps1"""; WorkingDir: "{commonappdata}\FerahAuto\App"
-Name: "{autodesktop}\FERAH AUTO"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{commonappdata}\FerahAuto\Start-FerahAutoApp.ps1"""; WorkingDir: "{commonappdata}\FerahAuto\App"
+Name: "{autoprograms}\FERAH AUTO"; Filename: "{app}\FERAH AUTO.exe"; WorkingDir: "{app}"
+Name: "{autodesktop}\FERAH AUTO"; Filename: "{app}\FERAH AUTO.exe"; WorkingDir: "{app}"
 
 [Run]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{tmp}\FirstRun.ps1"""; Flags: runhidden waituntilterminated; StatusMsg: "FERAH AUTO sunucusu yapılandırılıyor..."
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{commonappdata}\FerahAuto\Start-FerahAutoApp.ps1"""; Flags: postinstall nowait; Description: "FERAH AUTO uygulamasını başlat"
-
-[UninstallRun]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Stop-ScheduledTask -TaskName 'FERAH AUTO Local Server' -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName 'FERAH AUTO Local Server' -Confirm:$false -ErrorAction SilentlyContinue; Remove-NetFirewallRule -DisplayName 'FERAH AUTO Local Server TCP 8787' -ErrorAction SilentlyContinue"""; Flags: runhidden
+Filename: "{app}\FERAH AUTO.exe"; Description: "FERAH AUTO uygulamasını başlat"; Flags: postinstall nowait skipifsilent
 
 [Code]
 function InitializeSetup(): Boolean;
 begin
-  Result := IsWin64;
-  if not Result then
-    MsgBox('FERAH AUTO için 64-bit Windows gereklidir.', mbCriticalError, MB_OK);
+  Result := IsWin64 and (GetWindowsVersion >= $06020000);
+  if not IsWin64 then
+    MsgBox('FERAH AUTO kurulumu için 64-bit Windows gereklidir.', mbCriticalError, MB_OK)
+  else if GetWindowsVersion < $06020000 then
+    MsgBox('FERAH AUTO için Windows 8 veya üzeri gereklidir.', mbCriticalError, MB_OK);
 end;
