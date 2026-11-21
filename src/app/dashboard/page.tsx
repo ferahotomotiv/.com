@@ -261,9 +261,10 @@ export default function DashboardPage() {
     event.preventDefault();
     if (!supabase || !user || !isManager) { setNotice("Bu işlem için yönetici veya supervisor yetkisi gerekiyor."); return; }
     setSaving(true); setNotice(""); setAccessCode("");
+    let whatsappWindow: Window | null = null;
     try {
     // Open WhatsApp synchronously from the submit gesture so popup blockers do not suppress it.
-    const whatsappWindow = window.open("about:blank", "_blank");
+    whatsappWindow = window.open("about:blank", "_blank");
     const form = new FormData(event.currentTarget);
     const plate = String(form.get("plate")||"").trim().toLocaleUpperCase("tr-TR");
     const rawCode = crypto.getRandomValues(new Uint8Array(10));
