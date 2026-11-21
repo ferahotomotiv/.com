@@ -3,7 +3,7 @@ $WindowsDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $WindowsDir
 $RuntimeDir = Join-Path $WindowsDir "runtime"
 $ReleaseDir = Join-Path $RepoRoot "release"
-$NodeVersion = "v20.20.0"
+$NodeVersion = "v22.23.5"
 $Zip = Join-Path $env:TEMP "ferah-auto-node-$NodeVersion-win-x64.zip"
 $Extract = Join-Path $env:TEMP "ferah-auto-node-$NodeVersion-win-x64"
 
@@ -31,7 +31,11 @@ try {
 } finally { Pop-Location; $env:PATH = $oldPath }
 
 $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-if (-not $iscc) { throw "Install Inno Setup 6 on the build computer, then rerun this script. End users will receive only one setup EXE." }
-& $iscc.Source (Join-Path $WindowsDir "FerahAuto.iss")
+if (-not $iscc) {
+  $knownIscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+  if (Test-Path $knownIscc) { $isccPath = $knownIscc }
+  else { throw "Inno Setup 6 compiler (ISCC.exe) was not found." }
+} else { $isccPath = $iscc.Source }
+& $isccPath (Join-Path $WindowsDir "FerahAuto.iss")
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
 Write-Host "Single installer created: $(Join-Path $ReleaseDir 'FERAH-AUTO-TEK-KURULUM.exe')"
