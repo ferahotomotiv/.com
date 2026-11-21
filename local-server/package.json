@@ -9,7 +9,7 @@
     "dev": "node --watch src/server.js",
     "test": "node --test"
   },
-  "engines": { "node": ">=20.18 <23" },
+  "engines": { "node": ">=22.0 <23" },
   "dependencies": {
     "better-sqlite3": "11.10.0",
     "bcryptjs": "2.4.3",
