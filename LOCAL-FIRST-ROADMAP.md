@@ -36,3 +36,38 @@ The local API intentionally does not accept business-record writes yet. This pre
 - Back up SQLite database and media files to a second local disk/NAS and cloud when online.
 - Do not expose the local server port directly to the internet. Remote access needs a VPN or authenticated relay.
 - Windows 10 is out of standard Microsoft support; use a patched, supported edition where possible and keep the server isolated behind the router firewall.
+
+
+## Verified application inventory (2026-11-21)
+
+### Public tables confirmed from the connected production project
+- `profiles`, `customers`, `customer_vehicle_access_codes`
+- `vehicles`, `vehicle_events`, `vehicle_photos`
+- `service_jobs`, `service_job_procurement_items`
+- `inventory_products`, `inventory_movements`
+- `financial_entries`, `vehicle_costs`
+- `staff_messages`, `staff_message_reads`
+
+All 14 tables above currently have RLS enabled. Foreign keys connect vehicles to customers, service jobs to vehicles, procurement to jobs/inventory, and activity/finance/messages to staff profiles. Preserve these relations and UUIDs in the local schema.
+
+### Dashboard operations found in the existing Next.js client
+- Direct Supabase table access spans all operational modules listed above.
+- Auth calls include `getUser`, `getSession`, and `signOut`.
+- Storage access is used for vehicle and staff/message media.
+- Business-critical RPCs found in the dashboard: `set_my_presence`, `create_vehicle_intake`, `record_inventory_stock_in`, `create_service_job_procurement_items`, `receive_service_job_procurement_item`, `fulfill_service_job_from_stock`, `receive_service_job_purchase`, `assign_service_job_installation`, `reopen_delivered_vehicle_service`.
+
+### Current packaging blocker
+The current Windows workflow bundles `local-server/` and its Node runtime only. It does **not** build or package the Next.js frontend, and the current Inno Setup script creates no application shortcut. The local server's generic business-record write endpoint intentionally returns HTTP 501. Therefore the currently installed EXE is a server bootstrap, not the desktop application and not an offline-ready replica.
+
+### Implementation order
+1. Add a real local application host to the Windows package (production Next.js standalone output, static assets and required runtime files); create Start Menu and Desktop shortcuts that open the local app only after health checks pass.
+2. Implement local auth bootstrap and identity mapping without exposing Supabase privileged keys to clients.
+3. Port schema, constraints, indexes, foreign keys, and validated business operations into SQLite; implement transactional APIs and audit/idempotency.
+4. Replace direct browser Supabase calls with a typed data/auth/storage adapter, retaining cloud mode until local parity is verified.
+5. Implement sync gateway and per-domain conflict policies; test restore and offline/online transitions.
+6. Produce a new installer only after the full frontend is included and automated smoke tests pass.
+
+### Verified source status
+- The current dashboard is a 153 KB client component and directly uses Supabase for data, auth, storage and RPC operations.
+- `src/lib/supabase/client.ts` returns `null` when public Supabase environment variables are absent; the login page currently treats that as a configuration error.
+- The existing Windows build script installs production dependencies only for `local-server`; no Next.js build is part of the installer workflow.
