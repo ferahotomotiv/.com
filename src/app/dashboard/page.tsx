@@ -302,6 +302,7 @@ export default function DashboardPage() {
     if(linkedVehicle && ["delivered","cancelled"].includes(linkedVehicle.status)) { setNotice("Teslim edilmiş veya iptal edilmiş aracın iş emri kapalıdır."); return; }
     const f = new FormData(form);
     const requestedStage = String(f.get("next_status")||"");
+    const nextStatus=(requestedStage||job.status) as VehicleStatus;
     const transitions:Record<string,string[]> = {inspecting:["waiting_parts","repairing"],waiting_parts:["repairing"],repairing:["testing"],testing:["ready"],ready:["delivered"]};
     if(requestedStage && !(transitions[job.status]||[]).includes(requestedStage)) { setNotice("Bu aşamaya doğrudan geçilemez. Sıradaki aşamayı seçin."); return; }
     const diagnosis=String(f.get("diagnosis")||"").trim();
@@ -310,7 +311,6 @@ export default function DashboardPage() {
     const partsSupplier=String(f.get("parts_supplier")||"");
     const partsExpectedRaw=String(f.get("parts_expected_at")||"");
     if(nextStatus==="waiting_parts" && (!partsSupplier || !partsExpectedRaw)) { setNotice("Parça bekleniyor aşamasında temin sorumlusu ve tahmini geliş zamanı zorunludur."); return; }
-    const nextStatus=(requestedStage||job.status) as VehicleStatus;
     const patch:Record<string,unknown>={diagnosis,required_parts:requiredParts,mechanic_notes:mechanicNotes,parts_supplier:partsSupplier||null,parts_expected_at:partsExpectedRaw?new Date(partsExpectedRaw).toISOString():null};
     if(requestedStage) patch.status=nextStatus;
     if(nextStatus==="repairing" && !job.started_at) patch.started_at=new Date().toISOString();
