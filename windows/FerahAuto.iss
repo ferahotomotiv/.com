@@ -33,7 +33,6 @@ Source: "FirstRun.ps1"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Run]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{tmp}\FirstRun.ps1"""; Flags: runhidden waituntilterminated; StatusMsg: "FERAH AUTO sunucusu yapılandırılıyor..."
-Filename: "http://127.0.0.1:8787/"; Description: "Kurulumdan sonra FERAH AUTO sunucu sayfasını aç"; Flags: postinstall shellexec skipifsilent
 
 [UninstallRun]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Stop-ScheduledTask -TaskName 'FERAH AUTO Local Server' -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName 'FERAH AUTO Local Server' -Confirm:$false -ErrorAction SilentlyContinue; Remove-NetFirewallRule -DisplayName 'FERAH AUTO Local Server TCP 8787' -ErrorAction SilentlyContinue"""; Flags: runhidden
