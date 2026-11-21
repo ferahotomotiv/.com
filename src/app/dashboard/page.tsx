@@ -556,7 +556,7 @@ export default function DashboardPage() {
           <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[15px] border border-white/15 bg-[linear-gradient(145deg,#30343b_0%,#111419_58%,#050607_100%)] shadow-[0_8px_24px_rgba(0,0,0,.42),inset_0_1px_0_rgba(255,255,255,.16)] transition duration-500 group-hover:-translate-y-0.5 group-hover:border-white/30 group-hover:shadow-[0_10px_30px_rgba(0,0,0,.55),0_0_22px_rgba(210,220,235,.12)]">
             <span aria-hidden="true" className="pointer-events-none absolute -inset-8 rotate-[-28deg] bg-[linear-gradient(90deg,transparent,rgba(255,255,255,.16),transparent)] opacity-60 motion-safe:animate-[ferahLogoShine_5s_ease-in-out_infinite]"/>
             <span aria-hidden="true" className="absolute inset-[3px] rounded-[12px] border border-white/[.07]"/>
-            <CarFront size={25} strokeWidth={1.8} className="relative z-10 text-[#f4f5f6] transition-transform duration-500 group-hover:scale-110 group-hover:-translate-y-0.5"/>
+            <img src="/branding/Metalik%20Ferah%20Auto%20Kalkan%20Logosu.png" alt="FERAH AUTO" className="relative z-10 h-10 w-10 object-contain drop-shadow-[0_2px_8px_rgba(212,175,55,.28)] transition-transform duration-500 group-hover:scale-110 group-hover:-translate-y-0.5"/>
             <span aria-hidden="true" className="absolute bottom-[7px] right-[8px] h-1.5 w-1.5 rounded-full bg-[#c7a66a] shadow-[0_0_9px_rgba(199,166,106,.9)] motion-safe:animate-pulse"/>
           </div>
           <div className="min-w-0">
