@@ -145,7 +145,7 @@ export async function PATCH(request: NextRequest) {
     if (!["admin", "manager"].includes(actor.role) && target.role !== "mechanic") {
       return NextResponse.json({ error: "Supervisor yalnızca usta hesaplarını yönetebilir." }, { status: 403 });
     }
-    if (role !== undefined && actor.role !== "admin") {
+    if (role !== undefined && role !== target.role && actor.role !== "admin") {
       return NextResponse.json({ error: "Personel rolünü yalnızca Merkez Yönetici değiştirebilir." }, { status: 403 });
     }
     if (actor.role !== "admin" && target.role !== "mechanic") {
