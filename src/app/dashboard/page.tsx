@@ -65,7 +65,14 @@ export default function DashboardPage() {
   const [selectedJobVehicleId,setSelectedJobVehicleId] = useState<string>("");
   const [notice,setNotice] = useState("");
   const [messageText,setMessageText] = useState("");
-  const [recipient,setRecipient] = useState("all");\n  const [messageKind,setMessageKind] = useState<"team"|"direct"|"announcement">("team");\n  const [messageAttachment,setMessageAttachment] = useState<File|null>(null);\n  const [pinAnnouncement,setPinAnnouncement] = useState(true);\n  const [messageFilter,setMessageFilter] = useState<"all"|"team"|"direct"|"announcement">("all");\n  const [messageSearch,setMessageSearch] = useState("");\n  const [messageReads,setMessageReads] = useState<MessageRead[]>([]);\n  const [attachmentUrls,setAttachmentUrls] = useState<Record<string,string>>({});
+  const [recipient,setRecipient] = useState("all");
+  const [messageKind,setMessageKind] = useState<"team"|"direct"|"announcement">("team");
+  const [messageAttachment,setMessageAttachment] = useState<File|null>(null);
+  const [pinAnnouncement,setPinAnnouncement] = useState(true);
+  const [messageFilter,setMessageFilter] = useState<"all"|"team"|"direct"|"announcement">("all");
+  const [messageSearch,setMessageSearch] = useState("");
+  const [messageReads,setMessageReads] = useState<MessageRead[]>([]);
+  const [attachmentUrls,setAttachmentUrls] = useState<Record<string,string>>({});
   const [showStaffForm,setShowStaffForm] = useState(false);
   const [editingStaff,setEditingStaff] = useState<Profile|null>(null);
   const [staffSaving,setStaffSaving] = useState(false);
