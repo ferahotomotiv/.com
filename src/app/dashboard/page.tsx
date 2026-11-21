@@ -511,7 +511,7 @@ export default function DashboardPage() {
             {onlineStaff.length===0&&<p className="mt-2 text-[10px] text-[#737d89]">Şu anda çevrim içi personel yok.</p>}
             {inactiveStaff.length>0&&<div className="mt-2 border-t border-white/5 pt-2 text-[9px] text-[#6e7783]">{inactiveStaff.length} pasif hesap</div>}
           </button>
-          <div className="mb-4 rounded-xl border border-white/8 bg-white/[.025] p-3"><div className="flex items-center gap-2 text-xs font-medium"><Shield size={14}/>{profile.role==="admin"?"Merkez Yönetici":profile.role==="manager"?"Yönetici":profile.role==="supervisor"?"Supervisor":"Usta"}</div><p className="mt-2 truncate text-[11px] text-[#7f8792]">{user?.email}</p></div>
+          <div className="mb-4 rounded-xl border border-white/8 bg-white/[.025] p-3"><div className="flex items-center gap-2 text-xs font-medium"><Shield size={14}/>{profile.role==="admin"?"Merkez Yönetici":profile.role==="manager"?"Yönetici":profile.role==="supervisor"?"Supervisor":"Usta"}</div><p className="mt-2 truncate text-[11px] text-[#7f8792]">@{profile.username||"kullanıcı adı tanımlı değil"}</p></div>
           <button onClick={signOut} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-xs text-[#89919d] hover:bg-white/5 hover:text-white"><LogOut size={16}/> Güvenli çıkış</button>
         </div>
       </aside>
