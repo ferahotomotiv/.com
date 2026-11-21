@@ -60,6 +60,7 @@ jobs:
           npm install --no-save --no-audit --no-fund @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
       - name: Generate Android project
         run: |
+          rm -rf android
           npx cap add android
           npx cap sync android
       - name: Set Android minimum SDK to 26
