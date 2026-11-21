@@ -619,7 +619,7 @@ export default function DashboardPage() {
     });
     const result = await response.json();
     if(!response.ok) { setNotice(result.error||"Kayıt silinemedi."); return; }
-    setNotice(type==="vehicle"?(result.deletedCustomer?"Araç, bağlı servis kayıtları ve başka aracı kalmayan müşteri kaydı kalıcı olarak silindi.":result.warning||"Araç ve bağlı servis kayıtları kalıcı olarak silindi. Müşterinin başka aracı varsa müşteri kaydı korundu."):type==="customer"?"Müşteri kaydı kalıcı olarak silindi. Araçlar ve servis geçmişleri korundu.":"Finans kaydı kalıcı olarak silindi.");
+    setNotice(type==="vehicle"?(result.deletedCustomer?"Araç, bağlı servis kayıtları ve başka aracı kalmayan müşteri kaydı kalıcı olarak silindi."+ (result.warning?" "+result.warning:""):result.warning||"Araç ve bağlı servis kayıtları kalıcı olarak silindi. Müşterinin başka aracı varsa müşteri kaydı korundu."):type==="customer"?"Müşteri kaydı kalıcı olarak silindi. Araçlar ve servis geçmişleri korundu.":"Finans kaydı kalıcı olarak silindi.");
     await loadData();
   }
 
