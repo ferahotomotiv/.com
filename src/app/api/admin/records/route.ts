@@ -35,15 +35,26 @@ export async function DELETE(request: NextRequest) {
 
     if (type === "vehicle") {
       const { data: vehicle, error: lookupError } = await admin
-        .from("vehicles").select("id,plate,photo_path,customer_id").eq("id", id).single();
+        .from("vehicles").select("id,plate,photo_path,showroom_model_path,customer_id").eq("id", id).single();
       if (lookupError) return NextResponse.json({ error: "Araç kaydı okunamadı: " + lookupError.message }, { status: 500 });
       if (!vehicle) return NextResponse.json({ error: "Bu kimlikle eşleşen araç kaydı bulunamadı." }, { status: 404 });
-      if (vehicle.photo_path) {
-        const { error: photoError } = await admin.storage.from("vehicle-media").remove([vehicle.photo_path]);
-        if (photoError) return NextResponse.json({ error: "Araç fotoğrafı silinemedi; kayıt güvenlik için korunuyor: " + photoError.message }, { status: 500 });
-      }
+      const { data: photoRows, error: photoLookupError } = await admin
+        .from("vehicle_photos").select("storage_path").eq("vehicle_id", id);
+      if (photoLookupError) return NextResponse.json({ error: "Araç görsel arşivi okunamadı; kayıt güvenlik için korunuyor: " + photoLookupError.message }, { status: 500 });
+      const storagePaths = [...new Set([
+        vehicle.photo_path,
+        vehicle.showroom_model_path,
+        ...(photoRows || []).map(row => row.storage_path)
+      ].filter((path): path is string => typeof path === "string" && path.length > 0))];
+      // Delete the database record first. Its dependent service history, events,
+      // photos and access code rows are removed by their foreign-key cascades.
       const { error } = await admin.from("vehicles").delete().eq("id", id);
       if (error) return NextResponse.json({ error: "Araç silinemedi: " + error.message }, { status: 500 });
+      let storageWarning: string | null = null;
+      if (storagePaths.length) {
+        const { error: storageError } = await admin.storage.from("vehicle-media").remove(storagePaths);
+        if (storageError) storageWarning = "Araç kaydı silindi ancak bazı dosyalar depolamada kaldı: " + storageError.message;
+      }
 
       let deletedCustomer = false;
       if (vehicle.customer_id) {
@@ -68,7 +79,7 @@ export async function DELETE(request: NextRequest) {
           deletedCustomer = true;
         }
       }
-      return NextResponse.json({ ok: true, deleted: "vehicle", label: vehicle.plate, deletedCustomer });
+      return NextResponse.json({ ok: true, deleted: "vehicle", label: vehicle.plate, deletedCustomer, warning: storageWarning });
     }
 
     if (type === "customer") {
